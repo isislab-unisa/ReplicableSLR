@@ -1,0 +1,162 @@
+# 📘 Sezione: Caricamento e Gestione dei Ranking CORE e SCImago
+
+## 🔹 **Obiettivo**
+
+L’obiettivo di questa sezione è costruire un sistema riutilizzabile e facilmente estendibile per **caricare automaticamente i file CSV contenenti i ranking accademici** da:
+
+* **CORE** (ranking conferenze)
+* **SCImago Journal Rank (SJR)** (ranking riviste)
+
+Questi dati sono indicizzati per anno e utilizzati dal sistema `VenueRankChecker` per verificare la qualità e il posizionamento di venue accademiche, tenendo conto dell’anno specifico.
+
+---
+
+## 🔹 **Struttura delle Cartelle su Google Drive**
+
+I file sono archiviati su **Google Drive** e organizzati per sorgente, con convenzione di naming standardizzata:
+
+```
+/MyDrive/core_rankings/       → core_2023.csv, core_2022.csv, ...
+/MyDrive/scimago_rankings/    → scimago_2023.csv, scimago_2022.csv, ...
+```
+
+📌 **Convenzione di naming obbligatoria**:
+
+* `core_YYYY.csv`
+* `scimago_YYYY.csv`
+
+---
+
+## 🔹 **Accesso da Google Colab**
+
+Google Colab non ha accesso diretto al filesystem locale, quindi i dati sono montati da Google Drive:
+
+```python
+from google.colab import drive
+drive.mount('/content/drive')
+```
+
+Dopo il montaggio, i percorsi completi diventano:
+
+```python
+core_dir = '/content/drive/MyDrive/core_rankings'
+scimago_dir = '/content/drive/MyDrive/scimago_rankings'
+```
+
+---
+
+## 🔹 **Caricamento automatico dei file**
+
+Nel modulo `loader.py`, i file CSV vengono letti automaticamente, indicizzati per anno, e memorizzati in dizionari Python:
+
+```python
+core_rankings[2023]      # → DataFrame CORE 2023
+scimago_rankings[2022]   # → DataFrame SCIMAGO 2022
+```
+
+Il caricamento avviene tramite `Loader`:
+
+```python
+from venuerankchecker.loader import Loader
+
+loader = Loader(core_dir, scimago_dir)
+core_rankings = loader.core_rankings
+scimago_rankings = loader.scimago_rankings
+```
+
+---
+
+## 🔹 **Trattamento file SCIMAGO**
+
+Per i file SCIMAGO:
+
+* È usato `sep=';'` poiché i CSV europei spesso usano il punto e virgola come separatore.
+* È impostato `low_memory=False` per evitare warning su colonne con tipi misti.
+* Il sistema gestisce dinamicamente colonne come `"Title"`, `"SJR"`, `"H index"`, `"Quartile"`, verificandone la presenza.
+
+---
+
+## 🔹 **Motivazioni tecniche**
+
+| Aspetto                  | Scelta tecnica                              |
+| ------------------------ | ------------------------------------------- |
+| Accesso ai file          | Google Drive montato in Colab               |
+| Separazione per sorgente | Cartelle distinte per CORE e SCIMAGO        |
+| Convenzione file         | `core_YYYY.csv`, `scimago_YYYY.csv`         |
+| Indicizzazione           | Dizionari indicizzati per anno              |
+| Compatibilità futura     | Parsing flessibile per colonne e separatori |
+
+---
+
+## 🔹 **Manutenzione e Uso Futuro**
+
+Per garantire che il sistema resti funzionante nel tempo:
+
+### 📁 **1. Struttura delle cartelle**
+
+Mantenere le seguenti cartelle su Google Drive:
+
+```
+/MyDrive/core_rankings/
+/MyDrive/scimago_rankings/
+```
+
+### 📄 **2. Convenzione di naming**
+
+Usare sempre la forma:
+
+* `core_202X.csv`
+* `scimago_202X.csv`
+
+⚠️ Il sistema **non riconosce file con nomi diversi**.
+
+### 🛠️ **3. Aggiunta di nuovi dati**
+
+Per aggiungere i ranking di un nuovo anno:
+
+1. Salvare i file CSV nella cartella appropriata.
+2. Assicurarsi che rispettino il formato previsto:
+
+   * CORE: `[Conference name], [Rank], [Field], [Subfield]` (senza intestazioni, le colonne vengono assegnate manualmente)
+   * SCIMAGO: CSV con intestazione e separatore `;`
+
+### 📑 **4. Modifiche future al formato**
+
+Se i formati dei file cambiano (es. nuove colonne, cambio separatore):
+
+* Aggiornare il modulo `loader.py`, in particolare i metodi:
+
+  * `load_core_files()`
+  * `load_scimago_files()`
+* Documentare le modifiche nel progetto (README o log di manutenzione)
+
+### 🧪 **5. Validazione**
+
+Dopo l’aggiunta di nuovi file:
+
+* Verificare che `VenueRankChecker` trovi i dati corretti per l’anno aggiunto.
+* Usare metodi di test come:
+
+```python
+checker.check_all("SIGMOD")
+```
+
+---
+
+## 🧱 Estensibilità futura
+
+* Il modulo `Loader` può essere esteso per includere nuove fonti (es. Google Scholar Metrics).
+* Nuove classi possono essere aggiunte seguendo la struttura modulare già definita (`BaseSource`, `CoreSource`, `ScimagoSource`).
+* I decorator possono essere usati per logging, timing e gestione errori, facilitando il debugging e il monitoraggio.
+
+---
+
+## ✅ Conclusione
+
+Questa struttura modulare e mantenibile consente:
+
+* Caricamento automatico e scalabile dei ranking
+* Verifiche flessibili e multi-anno
+* Aggiunta annuale dei dati senza modificare il codice
+
+> 🔄 **Mantieni naming coerente + struttura cartelle + formato CSV stabile → tutto funzionerà senza modifiche.**

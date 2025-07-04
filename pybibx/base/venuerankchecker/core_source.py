@@ -1,8 +1,10 @@
 from .base import BaseSource
 from .utils import fuzzy_match, log_result
 import pandas as pd
+from .decorators import log_call
 
 class CoreSource(BaseSource):
+    @log_call
     def check(self, venue_name, log=True):
         name = venue_name.strip().lower()
         matches = []
