@@ -1,0 +1,68 @@
+# 📘 Sezione: Caricamento e gestione dei ranking CORE e SCImago
+### **🔹 Obiettivo**
+Lo scopo di questa sezione è costruire un sistema riutilizzabile per caricare e gestire automaticamente i file CSV contenenti i ranking accademici da CORE e SCImago Journal Rank (SJR), disponibili in formato per anno (es. core_2023.csv, scimago_2021.csv).
+Questi dati vengono usati per verificare la qualità e il posizionamento di riviste e conferenze in base all’anno.
+
+### **🔹 Struttura delle cartelle su Google Drive**
+Abbiamo organizzato i file CSV su Google Drive per facilitarne l'accesso automatico da Google Colab:
+
+bash
+
+/MyDrive/core_rankings/       → contiene file tipo core_2023.csv, core_2020.csv, ...
+/MyDrive/scimago_rankings/    → contiene file tipo scimago_2023.csv, scimago_2022.csv, ...
+
+I file devono seguire una convenzione precisa nel nome:
+
+core_+ anno.csv
+
+scimago_+ anno.csv
+
+### **🔹 Montaggio di Google Drive in Colab**
+Per accedere ai file da Colab, abbiamo montato Google Drive con il seguente comando:
+
+python
+
+**from google.colab import drive**
+
+**drive.mount('/content/drive')**
+
+### **🔹 Caricamento dei CSV in dizionari Python**
+Abbiamo caricato i CSV in dizionari indicizzati per anno.
+In questo modo, possiamo accedere facilmente ai dati:
+
+python
+
+**core_rankings[2023]        # DataFrame del ranking CORE 2023**
+
+**scimago_rankings[2022]     # DataFrame del ranking SCIMAGO 2022**
+
+Il caricamento è avvenuto con un ciclo for che legge tutti i file nella cartella e li organizza:
+
+python
+
+**import os**
+
+**import pandas as pd**
+
+## **Percorsi delle cartelle**
+core_dir = '/content/drive/MyDrive/core_rankings'
+
+scimago_dir = '/content/drive/MyDrive/scimago_rankings'
+
+# **🔹 Motivazioni tecniche**
+E' stato usato Google Drive (al momento personale) perché Colab non può accedere al file system locale.
+
+E' stato usato sep=';' per SCIMAGO poiché molti file usano il punto e virgola come separatore.
+
+low_memory=False serve a evitare avvisi su colonne con dati misti.
+
+I dati vengono indicizzati per anno per accedere facilmente ai ranking corretti durante verifiche automatiche.
+
+#**🔹 Manutenzione e uso futuro**
+Per garantire che il sistema sia riutilizzabile anche da altre persone:
+
+1. Mantenere la struttura delle cartelle e la convenzione di naming (core_YYYY.csv, scimago_YYYY.csv).
+
+2. Documentare eventuali modifiche nel formato dei file (es. cambi nei nomi delle colonne).
+
+3. Aggiungere nuovi file ogni anno, semplicemente salvandoli nella cartella appropriata.
