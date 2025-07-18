@@ -44,5 +44,5 @@ scimago_source = ScimagoSource(scimago_rankings)
 vrc = VenueRankChecker(core_source, scimago_source)
 
 # Esempio di utilizzo
-venue_name = "Information Retrieval Facility Conference"
+venue_name = "Cell"
 vrc.check_all(venue_name)

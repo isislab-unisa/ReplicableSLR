@@ -1,4 +1,5 @@
-# 📘 Sezione: Caricamento e Gestione dei Ranking CORE e SCImago
+# 📘 Sezione: Caricamento e Gestione dei Ranking CORE e SCImago -- Punto 2:  Funzionalità per la consultazione del ranking di una venue, 
+dato il nome della venue e l’anno, integrando fonti autorevoli come CORE e SCIMAGO.
 
 ## 🔹 **Obiettivo**
 
@@ -160,3 +161,9 @@ Questa struttura modulare e mantenibile consente:
 * Aggiunta annuale dei dati senza modificare il codice
 
 > 🔄 **Mantieni naming coerente + struttura cartelle + formato CSV stabile → tutto funzionerà senza modifiche.**
+
+
+
+Learning	Factory:	Systematic	Literature	Review	attraverso	approcci	innovativi -- Punto 3: Supporto per attività di snowballing 
+(sia backward che forward), recuperando automaticamente l’elenco di articoli citanti e citati (usando Scopus come fonte principale) e 
+calcolando il numero di citazioni ricevute per ciascun articolo fornito in input.
