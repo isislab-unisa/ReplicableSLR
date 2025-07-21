@@ -1,4 +1,6 @@
 import requests
+import csv
+import os
 
 
 class ScopusSnowballing:
@@ -12,14 +14,8 @@ class ScopusSnowballing:
         }
 
     def _get_eid_from_identifier(self, identifier: str) -> str:
-        """
-        Ritorna l'EID dato un identificatore. Se è già un EID, lo ritorna.
-        Se è un DOI, lo converte in EID.
-        """
         if identifier.startswith("2-s2.0-"):
-            return identifier  # Già un EID
-
-        # Altrimenti assumiamo sia DOI
+            return identifier
         url = f"{self.BASE_URL}/search/scopus"
         params = {"query": f"DOI({identifier})"}
         r = requests.get(url, headers=self.headers, params=params)
@@ -30,42 +26,55 @@ class ScopusSnowballing:
         return results[0].get("eid")
 
     def get_citations_count(self, identifier: str) -> int:
-        """
-        Restituisce il numero totale di citazioni ricevute da un articolo, dato un DOI o EID.
-        """
         eid = self._get_eid_from_identifier(identifier)
         url = f"{self.BASE_URL}/abstract/eid/{eid}"
         params = {"field": "citedby-count"}
         r = requests.get(url, headers=self.headers, params=params)
         r.raise_for_status()
         data = r.json()
-        count = data['abstracts-retrieval-response']['coredata'].get('citedby-count', 0)
-        return int(count)
+        return int(data['abstracts-retrieval-response']['coredata'].get('citedby-count', 0))
 
     def get_forward_citations(self, identifier: str, max_results: int = 25) -> list:
-        """
-        Restituisce gli articoli che citano quello dato (forward snowballing).
-        Accetta DOI o EID.
-        """
         eid = self._get_eid_from_identifier(identifier)
         url = f"{self.BASE_URL}/search/scopus"
-        query = f"refeid({eid})"
-        params = {
-            "query": query,
-            "count": max_results
-        }
+        params = {"query": f"refeid({eid})", "count": max_results}
         r = requests.get(url, headers=self.headers, params=params)
         r.raise_for_status()
         return r.json().get('search-results', {}).get('entry', [])
 
     def get_references(self, identifier: str) -> list:
-        """
-        Restituisce gli articoli citati da quello dato (backward snowballing).
-        Accetta DOI o EID.
-        """
         eid = self._get_eid_from_identifier(identifier)
         url = f"{self.BASE_URL}/abstract/eid/{eid}"
         params = {"view": "REF"}
         r = requests.get(url, headers=self.headers, params=params)
         r.raise_for_status()
         return r.json().get('abstracts-retrieval-response', {}).get('references', {}).get('reference', [])
+
+    def save_forward_to_csv(self, identifier: str, filename: str = "forward_citations.csv", max_results: int = 25):
+        forward = self.get_forward_citations(identifier, max_results)
+        with open(filename, mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Title", "Authors", "Publication Name", "Date", "DOI"])
+            for entry in forward:
+                writer.writerow([
+                    entry.get("dc:title", ""),
+                    entry.get("dc:creator", ""),
+                    entry.get("prism:publicationName", ""),
+                    entry.get("prism:coverDate", ""),
+                    entry.get("prism:doi", "")
+                ])
+        print(f"[✓] Forward citations salvati in {filename}")
+
+    def save_backward_to_csv(self, identifier: str, filename: str = "backward_references.csv"):
+        references = self.get_references(identifier)
+        with open(filename, mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Title", "Authors", "Source Title", "Publication Year"])
+            for ref in references:
+                writer.writerow([
+                    ref.get("ref-title", ""),
+                    ref.get("ref-authors", ""),
+                    ref.get("source-title", ""),
+                    ref.get("publicationyear", "")
+                ])
+        print(f"[✓] Backward references salvati in {filename}")
