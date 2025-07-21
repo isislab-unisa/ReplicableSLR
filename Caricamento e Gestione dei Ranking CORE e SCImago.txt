@@ -167,3 +167,10 @@ Questa struttura modulare e mantenibile consente:
 Learning	Factory:	Systematic	Literature	Review	attraverso	approcci	innovativi -- Punto 3: Supporto per attività di snowballing 
 (sia backward che forward), recuperando automaticamente l’elenco di articoli citanti e citati (usando Scopus come fonte principale) e 
 calcolando il numero di citazioni ricevute per ciascun articolo fornito in input.
+
+Prerequisiti per snowballing in scopus:
+Registrarsi e ottenere la chiave da https://dev.elsevier.come
+EID o DOI dell'articolo di partenza
+
+
+
