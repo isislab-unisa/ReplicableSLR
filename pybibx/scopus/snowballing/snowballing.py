@@ -10,7 +10,7 @@ Fornisce:
 Tutti i dati vengono memorizzati nella cache per efficienza.
 """
 
-from utils import ScopusAPI
+from pybibx.scopus.snowballing.utils import ScopusAPI
 
 class ScopusSnowballing:
     def __init__(self, api_key):
