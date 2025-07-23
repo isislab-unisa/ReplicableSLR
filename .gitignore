@@ -1,3 +1,4 @@
 *.env
 venue_rank_log.csv
 pybibx/base/main.py
+pybibx/scopus/snowballing/main.py
