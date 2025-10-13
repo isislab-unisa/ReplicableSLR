@@ -2,54 +2,64 @@ import requests
 import csv
 from datetime import datetime
 import os
+import time
 
 class ZenodoFetcher:
-    def __init__(self):
+    def __init__(self, max_retries=3, delay=5):
         self.base_url = "https://zenodo.org/api/records"
+        self.max_retries = max_retries
+        self.delay = delay
 
     def fetch_records(self, query, max_results=50):
         """
         Cerca record su Zenodo usando la query specificata.
         Restituisce una lista di dizionari con metadati essenziali.
         """
-        params = {
-            'q': query,
-            'size': min(max_results, 100),
-            'sort': 'mostdownloaded',
-            'all_versions': 'false'
-        }
+        results = []
+        size = min(max_results, 100)
+        retries = 0
 
-        print(f"[INFO] Chiamata API Zenodo per query: '{query}' con max {params['size']} risultati")
-        response = requests.get(self.base_url, params=params)
+        while retries < self.max_retries:
+            try:
+                params = {
+                    'q': query,
+                    'size': size,
+                    'sort': 'mostdownloaded',
+                    'all_versions': 'false'
+                }
 
-        if response.status_code != 200:
-            raise Exception(f"Errore API Zenodo: {response.status_code} - {response.text}")
+                print(f"[INFO] Chiamata API Zenodo per query: '{query}' con max {size} risultati")
+                response = requests.get(self.base_url, params=params, timeout=30)
 
-        items = response.json().get('hits', {}).get('hits', [])
-        records = []
+                if response.status_code == 200:
+                    items = response.json().get('hits', {}).get('hits', [])
+                    for item in items:
+                        metadata = item.get('metadata', {})
+                        record = {
+                            'title': metadata.get('title'),
+                            'author': ", ".join([creator.get('name') for creator in metadata.get('creators', [])]),
+                            'description': metadata.get('description'),
+                            'created': item.get('created'),
+                            'updated': item.get('updated'),
+                            'language': metadata.get('language'),
+                            'downloads': item.get('stats', {}).get('downloads', 0),
+                            'url': item.get('links', {}).get('html'),
+                            'license': metadata.get('license', {}).get('id') if isinstance(metadata.get('license'), dict) else metadata.get('license')
+                        }
+                        results.append(record)
+                    return results
+                else:
+                    print(f"[WARN] Ricevuto status {response.status_code}, retry in {self.delay}s...")
+                    time.sleep(self.delay)
+                    retries += 1
+            except requests.exceptions.RequestException as e:
+                print(f"[ERRORE] {e}, retry in {self.delay}s...")
+                time.sleep(self.delay)
+                retries += 1
 
-        for item in items:
-            metadata = item.get('metadata', {})
-            record = {
-                'title': metadata.get('title'),
-                'author': ", ".join([creator.get('name') for creator in metadata.get('creators', [])]),
-                'description': metadata.get('description'),
-                'created': item.get('created'),
-                'updated': item.get('updated'),
-                'language': metadata.get('language'),
-                'downloads': item.get('stats', {}).get('downloads', 0),
-                'url': item.get('links', {}).get('html'),
-                'license': metadata.get('license', {}).get('id') if isinstance(metadata.get('license'), dict) else metadata.get('license')
-            }
-            records.append(record)
-
-        print(f"[INFO] Trovati {len(records)} record Zenodo")
-        return records
+        raise Exception(f"Errore API Zenodo persistente dopo {self.max_retries} tentativi.")
 
     def save_as_csv(self, data, filename='zenodo_output.csv'):
-        """
-        Salva i dati Zenodo in formato CSV, ordinati per numero di download (discendente).
-        """
         if not data:
             print("[WARN] Nessun dato da salvare.")
             return
@@ -64,18 +74,12 @@ class ZenodoFetcher:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for row in data_sorted:
-                formatted_row = {
-                    k: " ".join(str(v).split()) if isinstance(v, str) else v
-                    for k, v in row.items()
-                }
+                formatted_row = {k: " ".join(str(v).split()) if isinstance(v, str) else v for k, v in row.items()}
                 writer.writerow(formatted_row)
 
         print(f"[INFO] File CSV Zenodo salvato come '{filename}' con {len(data_sorted)} record.")
 
     def save_as_bib(self, records, filename='zenodo_output.bib'):
-        """
-        Salva i dati Zenodo in formato BibTeX, ordinati per numero di download.
-        """
         if not records:
             print("[WARN] Nessun record da salvare in BibTeX.")
             return
@@ -83,8 +87,7 @@ class ZenodoFetcher:
         records_sorted = sorted(records, key=lambda x: x.get('downloads', 0), reverse=True)
 
         def escape_bibtex(s):
-            if not s:
-                return ''
+            if not s: return ''
             s = s.replace('&', '\\&').replace('%', '\\%').replace('#', '\\#')
             s = s.replace('_', '\\_').replace('{', '\\{').replace('}', '\\}')
             return s
@@ -118,23 +121,18 @@ class ZenodoFetcher:
   year = {{{year}}},
   howpublished = {{\\url{{{url}}}}},
   note = {{{note}}}
-}}
-
+}}\n
 """
                 f.write(bib_entry)
 
         print(f"[INFO] File BibTeX Zenodo salvato come '{filename}' con {len(records_sorted)} record.")
 
     def print_records(self, records, max_display=10):
-        """
-        Stampa a schermo una selezione di record.
-        """
         if not records:
             print("[INFO] Nessun record da visualizzare.")
             return
 
         records_sorted = sorted(records, key=lambda x: x.get('downloads', 0), reverse=True)
-
         for i, rec in enumerate(records_sorted[:max_display], start=1):
             print(f"\n=== Record {i} ===")
             print(f"Titolo     : {rec.get('title', 'N/A')}")
@@ -146,32 +144,35 @@ class ZenodoFetcher:
             print(f"URL        : {rec.get('url', 'N/A')}")
             print(f"Descrizione: {(rec.get('description', '')[:300] + '...') if rec.get('description') and len(rec['description']) > 300 else rec.get('description', 'N/A')}")
 
-
+# === ESEMPIO DI USO CON SOTTO-QUERY ===
 if __name__ == "__main__":
     zen = ZenodoFetcher()
-    records = zen.fetch_records("machine learning", max_results=30)
+    queries = [
+        '"cloud computing" ontology NOT "internet of things" NOT iot NOT healthcare',
+        '"multi-cloud" ontology NOT "internet of things"',
+        '"cloud interoperability" ontology',
+        '"cloud migration" ontology',
+        '"application portability" ontology'
+    ]
 
-    # Stampa i primi 5 record
-    zen.print_records(records, max_display=5)
-
-    # Salva i risultati
-    zen.save_as_csv(records, "zenodo_ml.csv")
-    zen.save_as_bib(records, "zenodo_ml.bib")
-
-    # Funzioni per aprire i file localmente (solo su Windows)
-    def open_file_local(filename):
+    all_records = []
+    for q in queries:
         try:
-            os.startfile(filename)  # Solo su Windows
-            print(f"[INFO] File '{filename}' aperto nel programma associato.")
+            recs = zen.fetch_records(q, max_results=50)
+            all_records.extend(recs)
+            time.sleep(2)  # pausa tra chiamate
         except Exception as e:
-            print(f"[ERRORE] Impossibile aprire il file: {e}")
+            print(f"[ERRORE] Query '{q}' fallita: {e}")
 
-    def download_csv_file(filename='zenodo_ml.csv'):
-        open_file_local(filename)
+    # Rimuove duplicati (basato su titolo e autore)
+    seen = set()
+    unique_records = []
+    for r in all_records:
+        key = (r.get('title'), r.get('author'))
+        if key not in seen:
+            seen.add(key)
+            unique_records.append(r)
 
-    def download_bib_file(filename='zenodo_ml.bib'):
-        open_file_local(filename)
-
-    # Esempio: apri CSV (facoltativo)
-    # download_csv_file()
-    # download_bib_file()
+    zen.print_records(unique_records, max_display=10)
+    zen.save_as_csv(unique_records, "zenodo_results.csv")
+    zen.save_as_bib(unique_records, "zenodo_results.bib")

@@ -89,18 +89,18 @@ if __name__ == "__main__":
     token = os.getenv("GITHUB_TOKEN")
     fetcher = GitHubFetcher(token=token)
 
-    # 🔹 Sotto-query (ognuna <256 caratteri)
+    # --- 🔹 Query principali con esclusioni strategiche (entro 256 caratteri)
     queries = [
-        '"cloud computing" ontology language:English created:>2014-01-01',
-        '"multi-cloud" ontology language:English created:>2014-01-01',
-        '"cloud interoperability" ontology language:English created:>2014-01-01',
-        '"cloud migration" ontology language:English created:>2014-01-01',
-        '"application portability" ontology language:English created:>2014-01-01',
-        '"semantic interoperability" cloud language:English created:>2014-01-01',
-        '"semantic web" cloud language:English created:>2014-01-01',
-        '"knowledge graph" cloud language:English created:>2014-01-01',
-        '"linked data" cloud language:English created:>2014-01-01',
-        '"linked open data" cloud language:English created:>2014-01-01'
+        '"cloud computing" ontology NOT "internet of things" NOT iot NOT healthcare language:English created:>2014-01-01',
+        '"multi-cloud" ontology NOT "smart city" NOT education NOT bioinformatics language:English created:>2014-01-01',
+        '"cloud interoperability" ontology NOT robotics NOT manufacture NOT healthcare language:English created:>2014-01-01',
+        '"cloud migration" ontology NOT "internet of things" NOT iot NOT robotics language:English created:>2014-01-01',
+        '"application portability" ontology NOT healthcare NOT bioinformatics NOT "smart city" language:English created:>2014-01-01',
+        '"semantic interoperability" cloud NOT "internet of things" NOT healthcare language:English created:>2014-01-01',
+        '"semantic web" cloud NOT education NOT manufacture language:English created:>2014-01-01',
+        '"knowledge graph" cloud NOT "smart city" NOT healthcare language:English created:>2014-01-01',
+        '"linked data" cloud NOT robotics NOT iot language:English created:>2014-01-01',
+        '"linked open data" cloud NOT healthcare NOT manufacture language:English created:>2014-01-01'
     ]
 
     all_results = []
@@ -108,7 +108,7 @@ if __name__ == "__main__":
         results = fetcher.fetch_repositories(query=q, max_results=500)
         all_results.extend(results)
 
-    # Rimuove duplicati in base all’URL
+    # 🔹 Rimuove duplicati in base all’URL
     seen = set()
     unique_results = []
     for r in all_results:
@@ -118,5 +118,5 @@ if __name__ == "__main__":
 
     print(f"[INFO] Totale risultati unici combinati: {len(unique_results)}")
 
-    fetcher.save_as_csv(unique_results, "github_combined.csv")
-    fetcher.save_as_bib(unique_results, "github_combined.bib")
+    fetcher.save_as_csv(unique_results, "github_combined_filtered.csv")
+    fetcher.save_as_bib(unique_results, "github_combined_filtered.bib")
