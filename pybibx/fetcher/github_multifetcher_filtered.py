@@ -3,7 +3,6 @@ import requests
 import csv
 from datetime import datetime
 from dotenv import load_dotenv
-from tabulate import tabulate
 
 
 class GitHubFetcher:
@@ -22,9 +21,7 @@ class GitHubFetcher:
             params = {
                 'q': query,
                 'per_page': 100,
-                'page': page,
-                'sort': 'stars',
-                'order': 'desc'
+                'page': page
             }
             response = requests.get(self.base_url, headers=self.headers, params=params)
             if response.status_code != 200:
@@ -33,6 +30,7 @@ class GitHubFetcher:
             items = data.get("items", [])
             if not items:
                 break
+
             for item in items:
                 all_results.append({
                     'title': item.get('name'),
@@ -45,9 +43,11 @@ class GitHubFetcher:
                     'url': item.get('html_url'),
                     'license': item.get('license', {}).get('name') if item.get('license') else None
                 })
+
             if len(items) < 100:
                 break
             page += 1
+
         print(f"[INFO] Trovati {len(all_results)} risultati per la query")
         return all_results
 
@@ -55,12 +55,12 @@ class GitHubFetcher:
         if not data:
             print("[WARN] Nessun dato da salvare.")
             return
-        data_sorted = sorted(data, key=lambda x: x.get('stars', 0), reverse=True)
         with open(filename, mode='w', newline='', encoding='utf-8-sig') as csvfile:
-            fieldnames = ['title', 'author', 'description', 'created', 'updated', 'language', 'stars', 'url', 'license']
+            fieldnames = ['title', 'author', 'description', 'created', 'updated',
+                          'language', 'stars', 'url', 'license']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(data_sorted)
+            writer.writerows(data)
         print(f"[INFO] File CSV salvato come '{filename}'")
 
     def save_as_bib(self, data, filename):
@@ -89,23 +89,29 @@ if __name__ == "__main__":
     token = os.getenv("GITHUB_TOKEN")
     fetcher = GitHubFetcher(token=token)
 
-    # --- 🔹 Query principali con esclusioni strategiche (entro 256 caratteri)
-    queries = [
-        '"cloud computing" ontology NOT "internet of things" NOT iot NOT healthcare language:English created:>2014-01-01',
-        '"multi-cloud" ontology NOT "smart city" NOT education NOT bioinformatics language:English created:>2014-01-01',
-        '"cloud interoperability" ontology NOT robotics NOT manufacture NOT healthcare language:English created:>2014-01-01',
-        '"cloud migration" ontology NOT "internet of things" NOT iot NOT robotics language:English created:>2014-01-01',
-        '"application portability" ontology NOT healthcare NOT bioinformatics NOT "smart city" language:English created:>2014-01-01',
-        '"semantic interoperability" cloud NOT "internet of things" NOT healthcare language:English created:>2014-01-01',
-        '"semantic web" cloud NOT education NOT manufacture language:English created:>2014-01-01',
-        '"knowledge graph" cloud NOT "smart city" NOT healthcare language:English created:>2014-01-01',
-        '"linked data" cloud NOT robotics NOT iot language:English created:>2014-01-01',
-        '"linked open data" cloud NOT healthcare NOT manufacture language:English created:>2014-01-01'
+    # --- 🔹 Query derivate dalla formula Scopus
+    keywords_cloud = ['"cloud computing"', '"cloud-computing"', '"multi-cloud"']
+    keywords_ontology = [
+        '"ontology"', '"ontologies"', '"semantic web"', '"knowledge graph"',
+        '"knowledge graphs"', '"linked data"', '"linked open data"'
     ]
+    exclusions = ['"internet of things"', 'iot']
+
+    # GitHub limita la query a 256 caratteri → generiamo combinazioni ridotte
+    queries = []
+    for c in keywords_cloud:
+        for o in keywords_ontology:
+            q = (
+                f'{c} {o} NOT ({" OR ".join(exclusions)}) '
+                'in:name,description '
+                'created:>2014-01-01 created:<2027-01-01 '
+                'language:English'
+            )
+            queries.append(q)
 
     all_results = []
     for q in queries:
-        results = fetcher.fetch_repositories(query=q, max_results=500)
+        results = fetcher.fetch_repositories(query=q, max_results=200)
         all_results.extend(results)
 
     # 🔹 Rimuove duplicati in base all’URL
@@ -118,5 +124,5 @@ if __name__ == "__main__":
 
     print(f"[INFO] Totale risultati unici combinati: {len(unique_results)}")
 
-    fetcher.save_as_csv(unique_results, "github_combined_filtered.csv")
-    fetcher.save_as_bib(unique_results, "github_combined_filtered.bib")
+    fetcher.save_as_csv(unique_results, "github_combined.csv")
+    fetcher.save_as_bib(unique_results, "github_combined.bib")
