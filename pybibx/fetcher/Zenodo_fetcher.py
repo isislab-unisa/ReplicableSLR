@@ -1,8 +1,8 @@
 import requests
 import csv
 from datetime import datetime
-import os
 import time
+
 
 class ZenodoFetcher:
     def __init__(self, max_retries=3, delay=5):
@@ -11,11 +11,6 @@ class ZenodoFetcher:
         self.delay = delay
 
     def fetch_records(self, query, batch_size=30, max_pages=20):
-        """
-        Recupera record da Zenodo con paginazione e gestione retry.
-        batch_size: numero di record per pagina
-        max_pages: numero massimo di pagine da scaricare
-        """
         all_results = []
         page = 1
 
@@ -39,28 +34,41 @@ class ZenodoFetcher:
                     if response.status_code == 200:
                         items = response.json().get('hits', {}).get('hits', [])
                         if not items:
-                            return all_results  # fine risultati
+                            break  # nessun record, passa alla fine
 
                         for item in items:
                             metadata = item.get('metadata', {})
-                            # filtro tipo documento (publication, conferencepaper)
                             doc_type = metadata.get('resource_type', {}).get('type', '').lower()
                             if doc_type not in ['publication', 'conferencepaper']:
                                 continue
+
+                            created = item.get('created')
+                            language = metadata.get('language')
+
+                            # filtro lingua e anno
+                            if language and language.lower() != 'en':
+                                continue
+                            if created:
+                                try:
+                                    year = datetime.strptime(created, '%Y-%m-%dT%H:%M:%S.%fZ').year
+                                    if year < 2014:
+                                        continue
+                                except:
+                                    pass
 
                             record = {
                                 'title': metadata.get('title'),
                                 'author': ", ".join([creator.get('name') for creator in metadata.get('creators', [])]),
                                 'description': metadata.get('description'),
-                                'created': item.get('created'),
+                                'created': created,
                                 'updated': item.get('updated'),
-                                'language': metadata.get('language'),
+                                'language': language,
                                 'downloads': item.get('stats', {}).get('downloads', 0),
                                 'url': item.get('links', {}).get('html'),
                                 'license': metadata.get('license', {}).get('id') if isinstance(metadata.get('license'), dict) else metadata.get('license')
                             }
                             all_results.append(record)
-                        break  # esci retry se ok
+                        break
 
                     else:
                         print(f"[WARN] Status {response.status_code}, retry in {self.delay}s...")
@@ -75,16 +83,15 @@ class ZenodoFetcher:
                 break
 
             page += 1
-            time.sleep(1)  # piccola pausa tra pagine
+            time.sleep(1)
 
         return all_results
 
-    def save_as_csv(self, data, filename='zenodo_output.csv'):
+    def save_as_csv(self, data, filename='zenodo_results.csv'):
         if not data:
             print("[WARN] Nessun dato da salvare.")
             return
 
-        # ordina per download discendente
         data_sorted = sorted(data, key=lambda x: x.get('downloads', 0), reverse=True)
         for i, row in enumerate(data_sorted, start=1):
             row['n'] = i
@@ -99,7 +106,7 @@ class ZenodoFetcher:
 
         print(f"[INFO] File CSV salvato come '{filename}' con {len(data_sorted)} record.")
 
-    def save_as_bib(self, records, filename='zenodo_output.bib'):
+    def save_as_bib(self, records, filename='zenodo_results.bib'):
         if not records:
             print("[WARN] Nessun record da salvare in BibTeX.")
             return
@@ -147,50 +154,41 @@ class ZenodoFetcher:
 
         print(f"[INFO] File BibTeX salvato come '{filename}' con {len(records_sorted)} record.")
 
-    def print_records(self, records, max_display=10):
-        if not records:
-            print("[INFO] Nessun record da visualizzare.")
-            return
 
-        records_sorted = sorted(records, key=lambda x: x.get('downloads', 0), reverse=True)
-        for i, rec in enumerate(records_sorted[:max_display], start=1):
-            print(f"\n=== Record {i} ===")
-            print(f"Titolo     : {rec.get('title', 'N/A')}")
-            print(f"Autore/i   : {rec.get('author', 'N/A')}")
-            print(f"Creato il  : {rec.get('created', 'N/A')}")
-            print(f"Lingua     : {rec.get('language', 'N/A')}")
-            print(f"Download   : {rec.get('downloads', 0)}")
-            print(f"Licenza    : {rec.get('license', 'N/A')}")
-            print(f"URL        : {rec.get('url', 'N/A')}")
-            print(f"Descrizione: {(rec.get('description', '')[:300] + '...') if rec.get('description') and len(rec['description']) > 300 else rec.get('description', 'N/A')}")
-
-# === USO PRINCIPALE CON SOTTO-QUERY E PAGINAZIONE AUTOMATICA ===
 if __name__ == "__main__":
     zen = ZenodoFetcher()
 
-    # sotto-query spezzate, ogni sotto-query < 256 caratteri
-    queries = [
-        '"cloud computing" ontology NOT "internet of things" NOT iot NOT healthcare language:English created:>2014-01-01',
-        '"multi-cloud" ontology NOT "internet of things" language:English created:>2014-01-01',
-        '"cloud interoperability" ontology NOT robotics NOT manufacture language:English created:>2014-01-01',
-        '"cloud migration" ontology NOT "internet of things" language:English created:>2014-01-01',
-        '"application portability" ontology NOT healthcare NOT bioinformatics language:English created:>2014-01-01',
-        '"semantic web" ontology NOT education NOT manufacture language:English created:>2014-01-01',
-        '"knowledge graph" ontology NOT "smart city" NOT healthcare language:English created:>2014-01-01'
+    # --- Keywords principali / ontologiche / esclusioni
+    keywords_cloud = ['"cloud computing"', '"cloud-computing"', '"multi-cloud"']
+    keywords_ontology = [
+        '"ontology"', '"ontologies"', '"semantic web"', '"knowledge graph"',
+        '"knowledge graphs"', '"linked data"', '"linked open data"'
     ]
+    exclusions = ['"internet of things"', 'iot']
+
+    # --- Generazione query Zenodo (solo titolo e keyword, escluso full-text)
+    queries = []
+    for c in keywords_cloud:
+        for o in keywords_ontology:
+            # Esclusioni applicate solo sulla descrizione
+            excl = " ".join([f'NOT metadata.description:{e}' for e in exclusions])
+            # Ricerca solo in titolo e keyword
+            q = f'(metadata.title:{c} OR metadata.keywords:{c}) AND (metadata.title:{o} OR metadata.keywords:{o}) {excl}'
+            queries.append(q)
 
     all_records = []
     for q in queries:
         try:
+            print(f"[INFO] Esecuzione query limitata ai campi titolo/keyword:\n  → {q}")
             recs = zen.fetch_records(q, batch_size=30, max_pages=20)
             all_records.extend(recs)
-            # salva parzialmente dopo ogni query
+            # salvataggio parziale
             zen.save_as_csv(all_records, "zenodo_results_partial.csv")
-            time.sleep(2)  # pausa tra query
+            time.sleep(2)
         except Exception as e:
             print(f"[ERRORE] Query '{q}' fallita: {e}")
 
-    # Rimuove duplicati (basato su titolo + autore)
+    # --- Deduplicazione (titolo + autore)
     seen = set()
     unique_records = []
     for r in all_records:
@@ -199,6 +197,11 @@ if __name__ == "__main__":
             unique_records.append(r)
             seen.add(key)
 
-    zen.print_records(unique_records, max_display=10)
+    # --- Salvataggio finale
     zen.save_as_csv(unique_records, "zenodo_results.csv")
     zen.save_as_bib(unique_records, "zenodo_results.bib")
+
+    print(f"[INFO] Totale record unici: {len(unique_records)}")
+
+
+
