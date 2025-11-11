@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from SnowballingFetcher import SnowballingFetcher
+from Snowballing_fetcher import SnowballingFetcher
 from Snowballing_analyzer import load_articles, analyze_article
 
 BASE_DIR = r"C:\Users\maria\Desktop\ReplicableSLR\pybibx\Snowballing"
