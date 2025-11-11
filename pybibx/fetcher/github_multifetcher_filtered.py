@@ -3,7 +3,7 @@ import requests
 import csv
 from datetime import datetime
 from dotenv import load_dotenv
-
+import time
 
 class GitHubFetcher:
     def __init__(self, token=None):
@@ -24,8 +24,23 @@ class GitHubFetcher:
                 'page': page
             }
             response = requests.get(self.base_url, headers=self.headers, params=params)
+
+            # --- 🔹 Gestione automatica del rate limit
+            if response.status_code == 403 and "rate limit" in response.text.lower():
+                reset_time = response.headers.get('X-RateLimit-Reset')
+                if reset_time:
+                    reset_timestamp = datetime.fromtimestamp(int(reset_time))
+                    wait_seconds = max(0, (reset_timestamp - datetime.utcnow()).seconds) + 5
+                    print(f"[WARN] Limite API raggiunto — attendo {wait_seconds} secondi fino a {reset_timestamp}...")
+                    time.sleep(wait_seconds)
+                else:
+                    print("[WARN] Limite API raggiunto — attendo 60 secondi...")
+                    time.sleep(60)
+                continue  # ripete la richiesta dopo l’attesa
+
             if response.status_code != 200:
                 raise Exception(f"Errore API GitHub: {response.status_code} - {response.text}")
+
             data = response.json()
             items = data.get("items", [])
             if not items:
@@ -44,12 +59,20 @@ class GitHubFetcher:
                     'license': item.get('license', {}).get('name') if item.get('license') else None
                 })
 
+            # --- 🔹 Informazioni sul rate limit
+            remaining = response.headers.get('X-RateLimit-Remaining')
+            print(f"[INFO] Pagina {page} completata ({len(items)} risultati). Limite residuo: {remaining}")
+
+            # --- 🔹 Pausa di sicurezza tra le richieste
+            time.sleep(3)
+
             if len(items) < 100:
                 break
             page += 1
 
         print(f"[INFO] Trovati {len(all_results)} risultati per la query")
         return all_results
+
 
     def save_as_csv(self, data, filename):
         if not data:
@@ -85,9 +108,26 @@ class GitHubFetcher:
 
 
 if __name__ == "__main__":
-    load_dotenv("token.env")
+    dotenv_path = r"C:\Users\maria\Desktop\ReplicableSLR\pybibx\fetcher\token.env"
+    if not os.path.exists(dotenv_path):
+        raise FileNotFoundError(f"File .env non trovato: {dotenv_path}")
+    load_dotenv(dotenv_path)
     token = os.getenv("GITHUB_TOKEN")
+
+    if not token:
+        raise ValueError("⚠️ Token GitHub non trovato. Verifica il file token.env e il nome della variabile.")
+    else:
+        print("[INFO] Token GitHub caricato correttamente.")
+
     fetcher = GitHubFetcher(token=token)
+
+    # --- 🔹 Controllo del rate limit
+    check = requests.get("https://api.github.com/rate_limit", headers={'Authorization': f'token {token}'})
+    if check.status_code == 200:
+        limits = check.json().get('resources', {}).get('search', {})
+        print(f"[INFO] Limite rimanente: {limits.get('remaining', '?')}/{limits.get('limit', '?')} richieste disponibili")
+    else:
+        print("[WARN] Errore nel controllo del rate limit:", check.text)
 
     # --- 🔹 Query derivate dalla formula Scopus
     keywords_cloud = ['"cloud computing"', '"cloud-computing"', '"multi-cloud"']
@@ -97,7 +137,6 @@ if __name__ == "__main__":
     ]
     exclusions = ['"internet of things"', 'iot']
 
-    # GitHub limita la query a 256 caratteri → generiamo combinazioni ridotte
     queries = []
     for c in keywords_cloud:
         for o in keywords_ontology:
@@ -114,7 +153,7 @@ if __name__ == "__main__":
         results = fetcher.fetch_repositories(query=q, max_results=200)
         all_results.extend(results)
 
-    # 🔹 Rimuove duplicati in base all’URL
+    # 🔹 Rimuove duplicati
     seen = set()
     unique_results = []
     for r in all_results:
@@ -124,5 +163,6 @@ if __name__ == "__main__":
 
     print(f"[INFO] Totale risultati unici combinati: {len(unique_results)}")
 
-    fetcher.save_as_csv(unique_results, "github_combined.csv")
-    fetcher.save_as_bib(unique_results, "github_combined.bib")
+    fetcher.save_as_csv(unique_results, r"C:\Users\maria\Desktop\ReplicableSLR\pybibx\fetcher-results\github_combined.csv")
+    fetcher.save_as_bib(unique_results, r"C:\Users\maria\Desktop\ReplicableSLR\pybibx\fetcher-resultsgithub_combined.bib")
+

@@ -1,12 +1,4 @@
 *.env
 venue_rank_log.csv
 pybibx/base/main.py
-pybibx/scopus/snowballing/main.py
-github_results.csv
-github_results.bib
-Annotazioni per Tirocinio.md
-github_combined.bib
-github_combined.csv
-zenodo_results.csv
-zenodo_results.bib
-zenodo_results_partial.csv
+pybibx/fetcher-results/

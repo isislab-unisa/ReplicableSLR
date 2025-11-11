@@ -3,15 +3,15 @@ import pandas as pd
 import sys
 
 # Aggiungo il path dove risiede la cartella 'venuerankchecker'
-sys.path.insert(0, r"C:\Users\maria\Desktop\ReplicableSLR\pybibx\base")
+sys.path.insert(0, r"C:\Users\maria\Desktop\ReplicableSLR\pybibx")
 
 from venuerankchecker.checker import VenueRankChecker
 from venuerankchecker.core_source import CoreSource
 from venuerankchecker.scimago_source import ScimagoSource
 
 # Percorsi delle cartelle con i CSV (adatta i path a dove hai i file)
-core_dir = r"C:\Users\maria\Desktop\ReplicableSLR\core_rankings"
-scimago_dir = r"C:\Users\maria\Desktop\ReplicableSLR\scimago_rankings"
+core_dir = r"C:\Users\maria\Desktop\ReplicableSLR\Rankings-Core"
+scimago_dir = r"C:\Users\maria\Desktop\ReplicableSLR\Rankings-Scimago"
 
 # Caricamento dati CORE
 core_rankings = {}
@@ -34,6 +34,9 @@ for file in os.listdir(scimago_dir):
             df = pd.read_csv(os.path.join(scimago_dir, file), sep=';', encoding='utf-8', low_memory=False)
         except UnicodeDecodeError:
             df = pd.read_csv(os.path.join(scimago_dir, file), sep=';', encoding='ISO-8859-1', low_memory=False)
+        df = df.rename(columns=lambda x: x.strip())  # rimuove spazi
+        if "Sourceid" in df.columns:
+            df = df.rename(columns={"Sourceid": "ID"})
         scimago_rankings[year] = df
 
 # crea gli oggetti CoreSource e ScimagoSource con i dizionari dati
@@ -44,5 +47,5 @@ scimago_source = ScimagoSource(scimago_rankings)
 vrc = VenueRankChecker(core_source, scimago_source)
 
 # Esempio di utilizzo
-venue_name = "Cell"
+venue_name = "ACM International Conference on Research and Development in Information Retrieval, 2013"
 vrc.check_all(venue_name)
