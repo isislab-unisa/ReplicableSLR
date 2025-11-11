@@ -1,7 +1,6 @@
 import os
 import csv
 from difflib import get_close_matches
-from Snowballing_fetcher import SnowballingFetcher
 
 def load_articles(csv_path):
     if not os.path.exists(csv_path):

@@ -18,7 +18,6 @@ class SnowballingFetcher:
     def fetch_query(self, query):
         results = []
         start = 0
-
         while True:
             params = {"query": query, "start": start, "count": self.per_page}
             r = requests.get(self.base_search_url, headers=self.headers, params=params)
@@ -70,15 +69,20 @@ class SnowballingFetcher:
         if r.status_code != 200:
             print(f"[WARN] Articolo {scopus_id} non trovato per backward snowballing.")
             return []
+
         data = r.json().get("abstracts-retrieval-response", {})
         refs = data.get("item", {}).get("bibrecord", {}).get("tail", {}).get("bibliography", {}).get("reference", [])
         results = []
         for ref in refs:
             results.append({
+                "scopus_id": "",  # non disponibile nel backward
+                "eid": "",
                 "title": ref.get("ref-title", {}).get("title", ""),
                 "authors": "; ".join([a.get("authname") for a in ref.get("author", [])]) if ref.get("author") else "",
+                "doi": ref.get("ref-info", {}).get("doi", ""),
                 "year": ref.get("ref-info", {}).get("year", ""),
-                "doi": ref.get("ref-info", {}).get("doi", "")
+                "source": "",
+                "url": ""
             })
         return results
 
@@ -86,7 +90,6 @@ class SnowballingFetcher:
     def forward_snowball(self, scopus_id):
         results = []
         start = 0
-
         while True:
             params = {"query": f"REF({scopus_id})", "start": start, "count": self.per_page}
             r = requests.get(self.base_search_url, headers=self.headers, params=params)
@@ -113,6 +116,7 @@ class SnowballingFetcher:
                 citing_id = e.get("dc:identifier", "").replace("SCOPUS_ID:", "")
                 results.append({
                     "scopus_id": citing_id,
+                    "eid": e.get("eid", ""),
                     "title": e.get("dc:title") or "",
                     "authors": e.get("dc:creator") or "",
                     "doi": e.get("prism:doi") or "",
@@ -131,12 +135,11 @@ class SnowballingFetcher:
 
     # ---------------- Salvataggio CSV ----------------
     def save_csv(self, records, path):
-        # salvo solo record con scopus_id o title
-        records = [r for r in records if r.get("scopus_id") or r.get("title")]
+        records = [r for r in records if r.get("title") or r.get("scopus_id")]
         if not records:
             print(f"[WARN] Nessun record valido da salvare in {path}")
             return
-        fieldnames = list(records[0].keys())
+        fieldnames = ["scopus_id", "eid", "title", "authors", "doi", "year", "source", "url"]
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
