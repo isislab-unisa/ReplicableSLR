@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
-from snowballing_fetcher import SnowballingFetcher
-from snowballing_analyzer import load_articles, analyze_article
+from Snowballing_fetcher import SnowballingFetcher
+from Snowballing_analyzer import load_articles, analyze_article
 
 BASE_DIR = r"C:\Users\maria\Desktop\ReplicableSLR\pybibx\Snowballing"
 CSV_PATH = os.path.join(BASE_DIR, "scopus_query.csv")
