@@ -2,7 +2,6 @@ import requests
 import time
 import csv
 import os
-from datetime import datetime
 
 class SnowballingFetcher:
     def __init__(self, api_key, per_page=25, max_retries=3):
@@ -15,9 +14,7 @@ class SnowballingFetcher:
         self.per_page = per_page
         self.max_retries = max_retries
 
-    # ---------------------------------------------------------
-    # QUERY PRINCIPALE
-    # ---------------------------------------------------------
+    # ---------------- Query principale ----------------
     def fetch_query(self, query):
         results = []
         start = 0
@@ -66,9 +63,7 @@ class SnowballingFetcher:
         print(f"[INFO] Totale risultati recuperati: {len(results)}")
         return results
 
-    # ---------------------------------------------------------
-    # BACKWARD SNOWBALLING (articoli citati)
-    # ---------------------------------------------------------
+    # ---------------- Backward snowballing ----------------
     def backward_snowball(self, scopus_id):
         url = self.base_abstract_url + scopus_id
         r = requests.get(url, headers=self.headers)
@@ -87,9 +82,7 @@ class SnowballingFetcher:
             })
         return results
 
-    # ---------------------------------------------------------
-    # FORWARD SNOWBALLING (articoli citanti)
-    # ---------------------------------------------------------
+    # ---------------- Forward snowballing ----------------
     def forward_snowball(self, scopus_id):
         results = []
         start = 0
@@ -136,12 +129,12 @@ class SnowballingFetcher:
 
         return results
 
-    # ---------------------------------------------------------
-    # SALVATAGGIO CSV
-    # ---------------------------------------------------------
+    # ---------------- Salvataggio CSV ----------------
     def save_csv(self, records, path):
+        # salvo solo record con scopus_id o title
+        records = [r for r in records if r.get("scopus_id") or r.get("title")]
         if not records:
-            print(f"[WARN] Nessun record da salvare in {path}")
+            print(f"[WARN] Nessun record valido da salvare in {path}")
             return
         fieldnames = list(records[0].keys())
         os.makedirs(os.path.dirname(path), exist_ok=True)
