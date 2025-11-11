@@ -18,6 +18,7 @@ class SnowballingFetcher:
     def fetch_query(self, query):
         results = []
         start = 0
+
         while True:
             params = {"query": query, "start": start, "count": self.per_page}
             r = requests.get(self.base_search_url, headers=self.headers, params=params)
@@ -62,7 +63,7 @@ class SnowballingFetcher:
         print(f"[INFO] Totale risultati recuperati: {len(results)}")
         return results
 
-    # ---------------- Backward snowballing ----------------
+    # ---------------- Backward snowballing (corretto) ----------------
     def backward_snowball(self, scopus_id):
         url = self.base_abstract_url + scopus_id
         r = requests.get(url, headers=self.headers)
@@ -71,25 +72,47 @@ class SnowballingFetcher:
             return []
 
         data = r.json().get("abstracts-retrieval-response", {})
-        refs = data.get("item", {}).get("bibrecord", {}).get("tail", {}).get("bibliography", {}).get("reference", [])
+
+        # Prova entrambe le strutture note
+        refs = []
+        if "references" in data:
+            refs = data["references"].get("reference", [])
+        elif "item" in data:
+            refs = (
+                data["item"]
+                .get("bibrecord", {})
+                .get("tail", {})
+                .get("bibliography", {})
+                .get("reference", [])
+            )
+
         results = []
         for ref in refs:
+            ref_title = (
+                ref.get("ref-info", {})
+                .get("ref-title", {})
+                .get("title", "")
+            )
+            ref_authors = "; ".join(
+                [a.get("authname") for a in ref.get("author", []) if a.get("authname")]
+            ) if ref.get("author") else ""
+            ref_year = ref.get("ref-info", {}).get("year", "")
+            ref_doi = ref.get("ref-info", {}).get("doi", "")
+
             results.append({
-                "scopus_id": "",  # non disponibile nel backward
-                "eid": "",
-                "title": ref.get("ref-title", {}).get("title", ""),
-                "authors": "; ".join([a.get("authname") for a in ref.get("author", [])]) if ref.get("author") else "",
-                "doi": ref.get("ref-info", {}).get("doi", ""),
-                "year": ref.get("ref-info", {}).get("year", ""),
-                "source": "",
-                "url": ""
+                "title": ref_title,
+                "authors": ref_authors,
+                "year": ref_year,
+                "doi": ref_doi
             })
+
         return results
 
     # ---------------- Forward snowballing ----------------
     def forward_snowball(self, scopus_id):
         results = []
         start = 0
+
         while True:
             params = {"query": f"REF({scopus_id})", "start": start, "count": self.per_page}
             r = requests.get(self.base_search_url, headers=self.headers, params=params)
@@ -116,7 +139,6 @@ class SnowballingFetcher:
                 citing_id = e.get("dc:identifier", "").replace("SCOPUS_ID:", "")
                 results.append({
                     "scopus_id": citing_id,
-                    "eid": e.get("eid", ""),
                     "title": e.get("dc:title") or "",
                     "authors": e.get("dc:creator") or "",
                     "doi": e.get("prism:doi") or "",
@@ -135,11 +157,12 @@ class SnowballingFetcher:
 
     # ---------------- Salvataggio CSV ----------------
     def save_csv(self, records, path):
-        records = [r for r in records if r.get("title") or r.get("scopus_id")]
+        # salvo solo record con almeno un campo significativo
+        records = [r for r in records if any(r.values())]
         if not records:
             print(f"[WARN] Nessun record valido da salvare in {path}")
             return
-        fieldnames = ["scopus_id", "eid", "title", "authors", "doi", "year", "source", "url"]
+        fieldnames = list(records[0].keys())
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)

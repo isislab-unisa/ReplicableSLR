@@ -9,7 +9,7 @@ def load_articles(csv_path):
         return list(csv.DictReader(f))
 
 def find_article_by_title(records, title):
-    titles = [r["title"] for r in records if r["title"]]
+    titles = [r["title"] for r in records if r.get("title")]
     matches = get_close_matches(title.lower(), [t.lower() for t in titles], n=1, cutoff=0.6)
     if not matches:
         print("❌ Nessun articolo trovato con questo titolo.")
