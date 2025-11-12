@@ -18,9 +18,16 @@ if not os.path.exists(CSV_PATH):
     print("[INFO] Nessun file di risultati trovato. Eseguo la query iniziale...")
     query = 'TITLE-ABS-KEY("cloud computing" AND "ontology")'
     results = fetcher.fetch_query(query)
-    fetcher.save_csv(results, CSV_PATH)
+    fetcher.append_csv(results, CSV_PATH, "initial", "query")
 else:
     print("[INFO] File CSV trovato, procedo con l’analisi...")
 
 records = load_articles(CSV_PATH)
-analyze_article(fetcher, records, BASE_DIR)
+
+# --- Loop interattivo per analisi multipla ---
+while True:
+    analyze_article(fetcher, records, BASE_DIR)
+    cont = input("\nVuoi analizzare un altro articolo? (s/n): ").strip().lower()
+    if cont != "s":
+        print("👋 Fine sessione di snowballing.")
+        break

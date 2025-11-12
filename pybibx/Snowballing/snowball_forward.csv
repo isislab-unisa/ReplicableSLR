@@ -1,4 +1,2 @@
-﻿scopus_id,eid,title,authors,doi,year,source,url
-85104874457,2-s2.0-85104874457,Smart Bus Management and Tracking System,Hari Narasimhan M.,10.1007/978-981-15-8685-9_42,2021-01-01,Lecture Notes in Electrical Engineering,https://api.elsevier.com/content/abstract/scopus_id/85104874457
-85073340728,2-s2.0-85073340728,Product management system,Abhishek P.S.B.,10.1166/jctn.2019.8183,2019-01-01,Journal of Computational and Theoretical Nanoscience,https://api.elsevier.com/content/abstract/scopus_id/85073340728
-85059061126,2-s2.0-85059061126,Anomaly detection by using CFS subset and neural network with WEKA tools,Jabez J.,10.1007/978-981-13-1747-7_66,2019-01-01,Smart Innovation Systems and Technologies,https://api.elsevier.com/content/abstract/scopus_id/85059061126
+﻿scopus_id,title,authors,doi,year,source,url,origin_title,origin_year
+85075881857,Leveraging cloud computing for the semantic web: review and trends,Adedugbe O.,10.1007/s00500-019-04559-2,2020-04-01,Soft Computing,https://api.elsevier.com/content/abstract/scopus_id/85075881857,Semantic resource classification using statistical analysis for application characteristics in intercloud environment,2015-09-24
