@@ -1,93 +1,98 @@
-# backward_snowballing.py
+# forward_snowballing.py
 import requests
+import time
+import csv
+import os
 
-class BackwardSnowball:
-    """
-    Recupera i references di un articolo Scopus dato il suo SCOPUS ID.
-    Usa l'Abstract Retrieval API di Scopus e, se non disponibili, fa fallback su CrossRef tramite DOI.
-    Restituisce lista di dict con: title, authors, doi, year, source.
-    """
-
-    def __init__(self, api_key):
-        if not api_key:
-            raise ValueError("API key Scopus richiesta")
+class ForwardSnowball:
+    def __init__(self, api_key, per_page=25):
         self.api_key = api_key
-        self.base_url = "https://api.elsevier.com/content/abstract/scopus_id/{scopus_id}?view=FULL"
-        self.headers = {"X-ELS-APIKey": self.api_key, "Accept": "application/json"}
-        self.crossref_url = "https://api.crossref.org/works/{doi}"
+        self.per_page = per_page
+        self.base_search_url = "https://api.elsevier.com/content/search/scopus"
+        self.headers = {
+            "Accept": "application/json",
+            "X-ELS-APIKey": api_key
+        }
 
-    def backward(self, scopus_id):
-        if not scopus_id:
-            raise ValueError("SCOPUS ID non fornito")
+    def forward_snowball(self, scopus_id, origin_title="", origin_year=""):
+        results = []
+        start = 0
 
-        references = []
+        while True:
+            params = {"query": f"REF({scopus_id})", "start": start, "count": self.per_page}
+            r = requests.get(self.base_search_url, headers=self.headers, params=params)
 
-        # 🔹 1) Abstract Retrieval API Scopus
-        url = self.base_url.format(scopus_id=scopus_id)
-        doi_main = None
-        try:
-            r = requests.get(url, headers=self.headers)
-            if r.status_code == 200:
-                data = r.json()
+            if r.status_code == 429:
+                retry_after = int(r.headers.get("Retry-After", 30))
+                print(f"[WARN] Rate limit, attendo {retry_after}s...")
+                time.sleep(retry_after + 1)
+                continue
+            elif r.status_code == 400:
+                print(f"[WARN] REF query non valida per {scopus_id}")
+                break
+            elif r.status_code >= 500:
+                print(f"[WARN] Errore server {r.status_code} su REF({scopus_id}).")
+                time.sleep(3)
+                continue
 
-                # Salvo il DOI principale per fallback CrossRef
-                doi_main = data.get("abstracts-retrieval-response", {}) \
-                               .get("coredata", {}) \
-                               .get("prism:doi", None)
+            data = r.json()
+            entries = data.get("search-results", {}).get("entry", [])
+            if not entries:
+                break
 
-                # Lista references
-                ref_list = data.get("abstracts-retrieval-response", {}) \
-                               .get("references", {}) \
-                               .get("reference", [])
+            for e in entries:
+                citing_id = e.get("dc:identifier", "").replace("SCOPUS_ID:", "")
+                title = e.get("dc:title") or e.get("title") or "[missing]"
+                authors = e.get("dc:creator") or "[missing]"
+                doi = e.get("prism:doi") or "[missing]"
+                year = e.get("prism:coverDate") or e.get("prism:coverDisplayDate") or "[missing]"
+                source = e.get("prism:publicationName") or "[missing]"
 
-                for ref in ref_list:
-                    ref_info = ref.get("ref-info", {})
-                    title = ref_info.get("ref-title", {}).get("content", "")
-                    
-                    authors = ""
-                    if "ref-authors" in ref and ref["ref-authors"]:
-                        authors_list = ref["ref-authors"].get("author", [])
-                        authors = "; ".join([a.get("ce:indexed-name", "") for a in authors_list if a])
+                url = ""
+                links = e.get("link", [])
+                if isinstance(links, list):
+                    for l in links:
+                        if "@href" in l:
+                            url = l["@href"]
+                            break
+                if not url:
+                    url = "[missing]"
 
-                    doi = ref_info.get("ref-doi", "")
-                    year = ref_info.get("ref-publicationyear", "")
-                    source = ref_info.get("ref-publicationname", "")
+                results.append({
+                    "scopus_id": citing_id or "[missing]",
+                    "title": title,
+                    "authors": authors,
+                    "doi": doi,
+                    "year": year,
+                    "source": source,
+                    "url": url,
+                    "origin_title": origin_title,
+                    "origin_year": origin_year
+                })
 
-                    references.append({
-                        "title": title,
-                        "authors": authors,
-                        "doi": doi,
-                        "year": year,
-                        "source": source
-                    })
-            else:
-                print(f"[WARN] Abstract API fallita per {scopus_id}, status {r.status_code}")
+            start += len(entries)
+            total = int(data.get("search-results", {}).get("opensearch:totalResults", 0))
+            if start >= total:
+                break
+            time.sleep(1)
 
-        except Exception as e:
-            print(f"[ERROR] Errore durante il recupero Scopus: {e}")
+        return results
 
-        # 🔹 2) Fallback CrossRef se non ci sono references e c'è DOI
-        if not references and doi_main:
-            print(f"[INFO] Nessun reference trovato in Scopus, provo CrossRef per DOI {doi_main}")
-            try:
-                r = requests.get(self.crossref_url.format(doi=doi_main))
-                if r.status_code == 200:
-                    data = r.json()
-                    items = data.get("message", {}).get("reference", [])
-                    for ref in items:
-                        references.append({
-                            "title": ref.get("article-title", ""),
-                            "authors": ref.get("author", ""),
-                            "doi": ref.get("DOI", ""),
-                            "year": ref.get("year", ""),
-                            "source": ref.get("journal-title", "")
-                        })
-                else:
-                    print(f"[WARN] CrossRef fallita per DOI {doi_main}, status {r.status_code}")
-            except Exception as e:
-                print(f"[ERROR] Errore durante il fallback CrossRef: {e}")
+    def append_csv(self, records, path, mode="a"):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if not records:
+            print(f"[INFO] Nessun record da scrivere, CSV rimane intatto.")
+            return
 
-        if not references:
-            print(f"[INFO] Nessun reference recuperato per SCOPUS ID {scopus_id}")
+        fieldnames = list(records[0].keys())
+        file_exists = os.path.exists(path)
 
-        return references
+        with open(path, mode, newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if not file_exists or mode == "w":
+                writer.writeheader()
+            for r in records:
+                writer.writerow(r)
+
+        print(f"[INFO] Aggiunti {len(records)} record a {path}")
+
