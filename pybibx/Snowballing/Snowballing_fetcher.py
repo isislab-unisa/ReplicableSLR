@@ -1,10 +1,12 @@
+# Snowballing_fetcher.py
 import requests
 import time
 import csv
 import os
+from backward_snowballing import BackwardSnowball
 
 class SnowballingFetcher:
-    def __init__(self, api_key, per_page=25, max_retries=3):
+    def __init__(self, api_key, per_page=25, max_retries=3, cookies=None):
         self.base_search_url = "https://api.elsevier.com/content/search/scopus"
         self.base_abstract_url = "https://api.elsevier.com/content/abstract/scopus_id/"
         self.headers = {
@@ -13,6 +15,17 @@ class SnowballingFetcher:
         }
         self.per_page = per_page
         self.max_retries = max_retries
+        # cookies can be dict or list (selenium format); keep as-is and transform when needed
+        if cookies is None:
+            self.cookies = {}
+        elif isinstance(cookies, dict):
+            self.cookies = cookies
+        else:
+            # list of cookie dicts from selenium
+            self.cookies = {c["name"]: c["value"] for c in cookies}
+
+        # lazy import of BackwardSnowball to avoid import cycles; will be used when needed
+        self._backward_impl = None
 
     # ---------------- Query principale ----------------
     def fetch_query(self, query):
@@ -63,82 +76,31 @@ class SnowballingFetcher:
         print(f"[INFO] Totale risultati recuperati: {len(results)}")
         return results
 
-    # ---------------- Backward snowballing (Full Text API + CrossRef) ----------------
+    # ---------------- Backward snowballing (integrated) ----------------
     def backward_snowball(self, scopus_id, doi=None):
         """
-        Recupera gli articoli CITATI (backward snowballing) da un paper Scopus.
-        1️⃣ Prova a usare la Full Text API di Scopus (view=FULL)
-        2️⃣ Se fallisce, fa fallback su CrossRef (se il DOI è noto)
+        Wrapper che prova:
+         - scraping Scopus autenticato (usando cookie salvati)
+         - fallback DOI from Abstract API -> CrossRef
         """
-        refs = []
-
-        # ===== 1️⃣ Full Text API Scopus =====
-        try:
-            url = self.base_abstract_url + scopus_id
-            params = {"view": "FULL"}
-            r = requests.get(url, headers=self.headers, params=params, timeout=15)
-            if r.status_code == 200:
-                data = r.json().get("abstracts-retrieval-response", {})
-                ref_list = (
-                    data.get("item", {})
-                        .get("bibrecord", {})
-                        .get("tail", {})
-                        .get("bibliography", {})
-                        .get("reference", [])
-                )
-                for ref in ref_list:
-                    title = ref.get("ref-info", {}).get("ref-title", {}).get("title") or ""
-                    authors = "; ".join(
-                        [a.get("authname") for a in ref.get("author", []) if a.get("authname")]
-                    )
-                    year = ref.get("ref-info", {}).get("year") or ""
-                    doi_ref = ref.get("ref-info", {}).get("doi") or ""
-                    refs.append({
-                        "title": title,
-                        "authors": authors,
-                        "year": year,
-                        "doi": doi_ref
-                    })
-                if refs:
-                    print(f"[INFO] Trovati {len(refs)} riferimenti via Full Text API Scopus.")
-            else:
-                print(f"[WARN] Full Text API Scopus non disponibile ({r.status_code}).")
-        except Exception as e:
-            print(f"[ERROR] Errore chiamata Full Text API Scopus: {e}")
-
-        # ===== 2️⃣ Fallback su CrossRef =====
-        if not refs and doi:
+        # lazy import: evita dipendenze non richieste se non usi backward
+        if self._backward_impl is None:
             try:
-                print(f"[INFO] Tentativo fallback CrossRef per DOI {doi}...")
-                url_crossref = f"https://api.crossref.org/works/{doi}"
-                r = requests.get(url_crossref, timeout=15)
-                if r.status_code == 200:
-                    data = r.json()
-                    cross_refs = data.get("message", {}).get("reference", [])
-                    for ref in cross_refs:
-                        refs.append({
-                            "title": ref.get("unstructured") or ref.get("article-title") or "[no title]",
-                            "authors": ref.get("author", "[no author]"),
-                            "year": ref.get("year", "[no year]"),
-                            "doi": ref.get("DOI", "")
-                        })
-                    print(f"[INFO] Trovati {len(refs)} riferimenti via CrossRef.")
-                else:
-                    print(f"[WARN] Nessun riferimento disponibile su CrossRef ({r.status_code}).")
+                self._backward_impl = BackwardSnowball(api_key=self.headers.get("X-ELS-APIKey"), cookies=self.cookies)
             except Exception as e:
-                print(f"[ERROR] Errore chiamata CrossRef: {e}")
+                print(f"[ERROR] Impossibile inizializzare BackwardSnowball: {e}")
+                return []
 
-        if not refs:
-            print(f"[WARN] Nessun riferimento trovato per {scopus_id} (Full Text + CrossRef falliti).")
-
-        return refs
+        # prova con l'implementazione combinata
+        try:
+            refs = self._backward_impl.backward(scopus_id)
+            return refs
+        except Exception as e:
+            print(f"[ERROR] backward_snowball fallito: {e}")
+            return []
 
     # ---------------- Forward snowballing ----------------
     def forward_snowball(self, scopus_id, origin_title="", origin_year=""):
-        """
-        Recupera tutti gli articoli che citano lo scopus_id dato.
-        Salva sempre il record, anche se incompleto.
-        """
         results = []
         start = 0
 
