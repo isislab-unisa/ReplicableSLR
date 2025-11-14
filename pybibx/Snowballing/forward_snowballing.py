@@ -1,146 +1,93 @@
-# main.py
-import os
-import csv
-import hashlib
-from dotenv import load_dotenv
-from Scopus_Fetcher import ScopusFetcher
-from Snowballing_analyzer import load_articles, find_article_by_title
-from backward_snowballing import BackwardSnowball
-from forward_snowballing import ForwardSnowball
+# backward_snowballing.py
+import requests
 
-# ---------------- CONFIG ----------------
-BASE_DIR = r"C:\Users\maria\Desktop\ReplicableSLR\pybibx\Snowballing"
-RESULTS_DIR = os.path.join(BASE_DIR, "Results_Snowballing")
-os.makedirs(RESULTS_DIR, exist_ok=True)
+class BackwardSnowball:
+    """
+    Recupera i references di un articolo Scopus dato il suo SCOPUS ID.
+    Usa l'Abstract Retrieval API di Scopus e, se non disponibili, fa fallback su CrossRef tramite DOI.
+    Restituisce lista di dict con: title, authors, doi, year, source.
+    """
 
-ENV_PATH = os.path.join(BASE_DIR, "scopus_key.env")
-load_dotenv(ENV_PATH)
-API_KEY = os.getenv("SCOPUS_API_KEY")
-if not API_KEY:
-    raise ValueError("⚠️ SCOPUS_API_KEY non trovata!")
+    def __init__(self, api_key):
+        if not api_key:
+            raise ValueError("API key Scopus richiesta")
+        self.api_key = api_key
+        self.base_url = "https://api.elsevier.com/content/abstract/scopus_id/{scopus_id}?view=FULL"
+        self.headers = {"X-ELS-APIKey": self.api_key, "Accept": "application/json"}
+        self.crossref_url = "https://api.crossref.org/works/{doi}"
 
-# CSV principali
-CSV_PATH = os.path.join(BASE_DIR, "scopus_query.csv")
-MINIMAL_CSV = os.path.join(BASE_DIR, "scopus_query_minimal.csv")
-BACKWARD_CSV = os.path.join(RESULTS_DIR, "backward_snowballing.csv")
-FORWARD_CSV = os.path.join(RESULTS_DIR, "forward_snowballing.csv")
-LOG_QUERIES_CSV = os.path.join(BASE_DIR, "queries_log.csv")
+    def backward(self, scopus_id):
+        if not scopus_id:
+            raise ValueError("SCOPUS ID non fornito")
 
-# ---------------- FUNZIONI ----------------
-def hash_query(query):
-    """Crea hash MD5 della query per tracking."""
-    return hashlib.md5(query.encode("utf-8")).hexdigest()
+        references = []
 
-def update_queries_log(query, csv_path):
-    """Aggiorna il log delle query eseguite."""
-    if not os.path.exists(LOG_QUERIES_CSV):
-        with open(LOG_QUERIES_CSV, "w", newline="", encoding="utf-8-sig") as f:
-            writer = csv.DictWriter(f, fieldnames=["query_hash", "query", "csv_path"])
-            writer.writeheader()
-    with open(LOG_QUERIES_CSV, "a", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=["query_hash", "query", "csv_path"])
-        writer.writerow({"query_hash": hash_query(query), "query": query, "csv_path": csv_path})
+        # 🔹 1) Abstract Retrieval API Scopus
+        url = self.base_url.format(scopus_id=scopus_id)
+        doi_main = None
+        try:
+            r = requests.get(url, headers=self.headers)
+            if r.status_code == 200:
+                data = r.json()
 
-def check_query_cache(query):
-    """Verifica se la query è già stata eseguita e ritorna il CSV esistente."""
-    query_hash = hash_query(query)
-    if os.path.exists(LOG_QUERIES_CSV):
-        with open(LOG_QUERIES_CSV, "r", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if row["query_hash"] == query_hash and os.path.exists(row["csv_path"]):
-                    return row["csv_path"]
-    return None
+                # Salvo il DOI principale per fallback CrossRef
+                doi_main = data.get("abstracts-retrieval-response", {}) \
+                               .get("coredata", {}) \
+                               .get("prism:doi", None)
 
-# ---------------- COSTRUISCI QUERY ----------------
-print("Inserisci la query per Scopus (TITLE-ABS-KEY, AND, OR, NOT, ecc.):")
-query = input("> ").strip()
-if not query:
-    raise ValueError("Query non può essere vuota")
+                # Lista references
+                ref_list = data.get("abstracts-retrieval-response", {}) \
+                               .get("references", {}) \
+                               .get("reference", [])
 
-# ---------------- FETCH / CACHE ----------------
-cached_csv = check_query_cache(query)
-if cached_csv:
-    print(f"[INFO] Query già eseguita, riuso CSV: {cached_csv}")
-    records = load_articles(cached_csv)
-else:
-    print("[INFO] Eseguo query Scopus...")
-    fetcher = ScopusFetcher(api_key=API_KEY, per_page=25)
-    records = fetcher.fetch(query)
-    fetcher.save_csv(CSV_PATH)
-    update_queries_log(query, CSV_PATH)
-    records = load_articles(CSV_PATH)
+                for ref in ref_list:
+                    ref_info = ref.get("ref-info", {})
+                    title = ref_info.get("ref-title", {}).get("content", "")
+                    
+                    authors = ""
+                    if "ref-authors" in ref and ref["ref-authors"]:
+                        authors_list = ref["ref-authors"].get("author", [])
+                        authors = "; ".join([a.get("ce:indexed-name", "") for a in authors_list if a])
 
-# ---------------- SALVATAGGIO CSV RIDOTTO ----------------
-if records:
-    minimal_fields = ["scopus_id", "eid", "title", "references", "cited_by"]
-    minimal_records = [
-        {
-            "scopus_id": r.get("scopus_id", ""),
-            "eid": r.get("eid", ""),
-            "title": r.get("title", ""),
-            "references": r.get("references", ""),
-            "cited_by": r.get("cited_by", r.get("citations", 0))
-        } for r in records
-    ]
-    with open(MINIMAL_CSV, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=minimal_fields)
-        writer.writeheader()
-        writer.writerows(minimal_records)
-    print(f"[INFO] CSV minimale salvato in {MINIMAL_CSV}")
+                    doi = ref_info.get("ref-doi", "")
+                    year = ref_info.get("ref-publicationyear", "")
+                    source = ref_info.get("ref-publicationname", "")
 
-while True:
-    # ---------------- SELEZIONE ARTICOLO ----------------
-    search_title = input("Inserisci il titolo dell'articolo su cui fare snowballing:\n> ").strip()
-    article = find_article_by_title(records, search_title)
-    if not article:
-        print("❌ Articolo non trovato nel CSV.")
-        continue  # torniamo a chiedere un titolo
+                    references.append({
+                        "title": title,
+                        "authors": authors,
+                        "doi": doi,
+                        "year": year,
+                        "source": source
+                    })
+            else:
+                print(f"[WARN] Abstract API fallita per {scopus_id}, status {r.status_code}")
 
-    scopus_id = article["scopus_id"]
-    origin_title = article["title"]
-    origin_year = article.get("year", "")
-    print(f"[INFO] Articolo selezionato: {origin_title} (SCOPUS ID: {scopus_id})")
+        except Exception as e:
+            print(f"[ERROR] Errore durante il recupero Scopus: {e}")
 
-    # ---------------- BACKWARD SNOWBALLING ----------------
-    existing_backward_ids = set()
-    if os.path.exists(BACKWARD_CSV):
-        with open(BACKWARD_CSV, "r", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            existing_backward_ids = {row["scopus_id"] for row in reader}
+        # 🔹 2) Fallback CrossRef se non ci sono references e c'è DOI
+        if not references and doi_main:
+            print(f"[INFO] Nessun reference trovato in Scopus, provo CrossRef per DOI {doi_main}")
+            try:
+                r = requests.get(self.crossref_url.format(doi=doi_main))
+                if r.status_code == 200:
+                    data = r.json()
+                    items = data.get("message", {}).get("reference", [])
+                    for ref in items:
+                        references.append({
+                            "title": ref.get("article-title", ""),
+                            "authors": ref.get("author", ""),
+                            "doi": ref.get("DOI", ""),
+                            "year": ref.get("year", ""),
+                            "source": ref.get("journal-title", "")
+                        })
+                else:
+                    print(f"[WARN] CrossRef fallita per DOI {doi_main}, status {r.status_code}")
+            except Exception as e:
+                print(f"[ERROR] Errore durante il fallback CrossRef: {e}")
 
-    new_backward = [r for r in BackwardSnowball(api_key=API_KEY).backward(scopus_id)
-                    if r["scopus_id"] not in existing_backward_ids]
+        if not references:
+            print(f"[INFO] Nessun reference recuperato per SCOPUS ID {scopus_id}")
 
-    print(f"[INFO] Articoli citati (backward) nuovi trovati: {len(new_backward)}")
-    if new_backward:
-        fieldnames = list(new_backward[0].keys())
-        mode = "a" if existing_backward_ids else "w"
-        with open(BACKWARD_CSV, mode, newline="", encoding="utf-8-sig") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            if mode == "w":
-                writer.writeheader()
-            writer.writerows(new_backward)
-        print(f"[INFO] Backward snowballing aggiornato in {BACKWARD_CSV}")
-    else:
-        print("[INFO] Nessun nuovo articolo citato da aggiungere per backward snowballing")
-
-    # ---------------- FORWARD SNOWBALLING ----------------
-    forward_snowball = ForwardSnowball(api_key=API_KEY, per_page=25)
-    existing_forward_ids = set()
-    if os.path.exists(FORWARD_CSV):
-        with open(FORWARD_CSV, "r", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            existing_forward_ids = {row["scopus_id"] for row in reader}
-
-    new_forward = [r for r in forward_snowball.forward_snowball(scopus_id, origin_title, origin_year)
-                   if r["scopus_id"] not in existing_forward_ids]
-
-    print(f"[INFO] Articoli che citano (forward) nuovi trovati: {len(new_forward)}")
-    forward_snowball.append_csv(new_forward, FORWARD_CSV, mode="a" if existing_forward_ids else "w")
-
-    # ---------------- CONTINUA / TERMINA ----------------
-    cont = input("\nVuoi trovare citanti e citati di un altro articolo? (s/n): ").strip().lower()
-    if cont != "s":
-        print("\n✅ Fine operazione di snowballing")
-        break
+        return references
