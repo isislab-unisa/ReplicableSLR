@@ -245,12 +245,19 @@ with tab_run:
                 st.error(f"Errore durante la chiamata al motore: {e}")
                 st.stop()
 
+        # Pulizia dei record
         clean_records = [{k: clean_html(rec.get(k, "")) for k in rec.keys()} for rec in records]
+
+        # Salvataggio in session state
         st.session_state["last_engine"] = engine
         st.session_state["last_query"] = query
         st.session_state["last_records"] = clean_records
+
+        # Mostra subito il numero di risultati
         st.success(f"✅ Recuperati {len(clean_records)} risultati da {engine}")
-        st.rerun()  # aggiornato per Streamlit moderno
+        st.info(f"Puoi visualizzarli e scaricarli nella tab 'Results'.")
+
+        st.rerun()  # aggiorna la pagina
 
 with tab_results:
     st.subheader("📄 Risultati")
@@ -261,38 +268,74 @@ with tab_results:
         st.info("Nessuna ricerca eseguita in questa sessione. Vai su 'Run search' e avvia una query.")
     else:
         df = pd.DataFrame(records)
+
+        # Colonne effettive selezionate
         available_columns = df.columns.tolist()
         selected_columns_effective = [c for c in selected_columns if c in available_columns]
         if not selected_columns_effective:
             st.warning("Nessuna delle colonne selezionate è presente nei risultati. Mostro tutte le colonne disponibili.")
             selected_columns_effective = available_columns
 
+        # Mostra motore e query
         st.markdown(f"**Motore:** `{last_engine}`  •  **Query:** `{st.session_state.get('last_query','')}`")
-        st.info(f"Risultati totali: {len(df)} — colonne disponibili: {len(available_columns)}")
 
+        # Mostra numero totale di risultati trovati
+        st.info(f"📊 Risultati totali ottenuti: {len(df)} — colonne disponibili: {len(available_columns)}")
+
+        # Controlli di visualizzazione e download
         with st.expander("🔧 Controlli di visualizzazione e download", expanded=True):
-            col1, col2 = st.columns([2,2])
+            col1, col2 = st.columns([2, 2])
+
             with col1:
+                # Anteprima tabella
                 show_preview = st.checkbox("Mostra anteprima tabella", value=True)
-                preview_rows = st.number_input("Numero righe anteprima", min_value=5, max_value=200, value=50, step=5)
+                preview_rows = st.number_input(
+                    "Numero righe anteprima",
+                    min_value=5,
+                    max_value=len(df),
+                    value=min(50, len(df)),
+                    step=5
+                )
+
             with col2:
                 st.markdown("**Download**")
-                st.download_button("⬇️ Scarica CSV", to_csv_bytes(df[selected_columns_effective]),
-                                   file_name=f"{last_engine.lower()}_results_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.csv",
-                                   mime="text/csv")
-                st.download_button("⬇️ Scarica XLSX", to_xlsx_bytes(df[selected_columns_effective]),
-                                   file_name=f"{last_engine.lower()}_results_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.xlsx",
-                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                st.download_button("⬇️ Scarica BibTeX (visualizzati)",
-                                   to_bib_bytes(df[selected_columns_effective].to_dict(orient="records"), prefix=last_engine.lower()),
-                                   file_name=f"{last_engine.lower()}_results_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.bib",
-                                   mime="text/plain")
+                # CSV
+                csv_bytes = to_csv_bytes(df[selected_columns_effective])
+                st.download_button(
+                    "⬇️ Scarica CSV",
+                    data=csv_bytes,
+                    file_name=f"{last_engine.lower()}_results_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.csv",
+                    mime="text/csv"
+                )
+                # XLSX
+                xlsx_bytes = to_xlsx_bytes(df[selected_columns_effective])
+                st.download_button(
+                    "⬇️ Scarica XLSX",
+                    data=xlsx_bytes,
+                    file_name=f"{last_engine.lower()}_results_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                # BibTeX
+                bib_bytes = to_bib_bytes(df[selected_columns_effective].to_dict(orient="records"), prefix=last_engine.lower())
+                st.download_button(
+                    "⬇️ Scarica BibTeX (visualizzati)",
+                    data=bib_bytes,
+                    file_name=f"{last_engine.lower()}_results_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.bib",
+                    mime="text/plain"
+                )
 
+        # Anteprima tabella dinamica
         if show_preview:
             st.dataframe(df[selected_columns_effective].head(preview_rows), use_container_width=True, height=420)
 
+        # Inspector JSON singolo record
         with st.expander("🔎 Ispeziona record (JSON)"):
-            idx = st.number_input("Indice record (0-based)", min_value=0, max_value=max(0,len(df)-1), value=0)
+            idx = st.number_input(
+                "Indice record (0-based)",
+                min_value=0,
+                max_value=max(0, len(df)-1),
+                value=0
+            )
             st.json(records[int(idx)])
 
 with tab_help:
