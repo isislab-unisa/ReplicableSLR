@@ -172,7 +172,9 @@ elif engine == "GitHub":
         "Use GitHub search syntax. Examples:\n"
         "- Exact phrase: \"machine learning\"\n"
         "- Exclude term: -iot\n"
-        "- Combine multiple terms: \"cloud computing\" ontology -iot -\"internet of things\""
+        "- Combine multiple terms (AND by default): \"cloud computing\" ontology -iot -\"internet of things\"\n\n"
+        "- created:2014-01-01..2027-12-31"
+        "⚠️ Note: GitHub Search API returns a maximum of 1000 results per query even with pagination."
     )
 else:  # Zenodo
     st.info(
