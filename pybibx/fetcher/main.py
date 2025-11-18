@@ -11,7 +11,7 @@ import pandas as pd
 import re
 from datetime import datetime
 
-from github_multifetcher_filtered import GitHubFetcher
+from pybibx.fetcher.github_fetcher import GitHubFetcher
 from Zenodo_fetcher import ZenodoFetcher
 from Scopus_Fetcher import ScopusFetcher
 
