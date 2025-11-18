@@ -180,17 +180,21 @@ else:  # Zenodo
     st.info(
         "Use Zenodo syntax. Wildcards (*) and LIMIT-TO are not supported. Use AND, OR, NOT and publication_date. Example:\n\n"
         "(\"cloud computing\" OR \"cloud-computing\" OR \"multi-cloud\")\n"
-        "AND (\"ontology\" OR \"ontologies\" OR \"semantic web\" OR \"knowledge graph\" "
-        "OR \"knowledge graphs\" OR \"linked data\" OR \"linked open data\")\n"
-        "AND NOT (\"internet of things\" OR iot)\n"
+        "AND (\"ontolog*\" OR \"semantic web\" OR \"knowledge graph\" "
+        "OR \"linked data\" OR \"linked open data\")\n"
+        "AND NOT (\"internet of things\" OR \"iot\")\n"
         "AND publication_date:[2014-01-01 TO 2027-12-31]"
     )
 
 query = st.text_area("Enter query", height=120, placeholder="Write the query following engine syntax")
 
 with st.expander("📌 Available fields"):
-    for k, v in ENGINE_FIELDS[engine].items():
-        st.markdown(f"- **`{k}`** — {v}")
+    fields = list(ENGINE_FIELDS[engine].items())
+    n_cols = 3  # numero di colonne
+    cols = st.columns(n_cols)
+    for i, (field, desc) in enumerate(fields):
+        col = cols[i % n_cols]
+        col.markdown(f"- **`{field}`** — {desc}")
 
 with st.expander("🔧 Select columns", expanded=True):
     all_fields = list(ENGINE_FIELDS[engine].keys())
