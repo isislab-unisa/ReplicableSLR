@@ -9,9 +9,7 @@ import pandas as pd
 import re
 from datetime import datetime
 from io import BytesIO
-
-# import your fetchers (place the files in the same folder)
-from github_multifetcher_filtered import GitHubFetcher
+from pybibx.fetcher.github_fetcher import GitHubFetcher
 from Zenodo_fetcher import ZenodoFetcher
 from Scopus_Fetcher import ScopusFetcher
 
@@ -85,7 +83,7 @@ def to_xlsx_bytes(df: pd.DataFrame, table_name="ResultsTable") -> bytes:
 
 
 # ---------------------------
-# Field descriptions per engine
+# Engine fields
 # ---------------------------
 ENGINE_FIELDS = {
     "GitHub": {
@@ -133,39 +131,63 @@ ENGINE_FIELDS = {
     }
 }
 
+
 # ---------------------------
-# Streamlit UI setup
+# Streamlit UI
 # ---------------------------
 st.set_page_config(page_title="Unified Academic Fetcher", layout="wide")
 st.title("🔎 Unified Academic Fetcher")
 st.markdown("Unified interface to query **Scopus**, **GitHub** and **Zenodo**.")
 
-st.divider()
-
 with st.sidebar:
     st.header("Configuration")
     engine = st.radio("Search engine", ["Scopus", "GitHub", "Zenodo"], index=0)
     st.markdown("---")
-    st.subheader("Credentials")
     github_token = st.text_input("GitHub token (optional)", type="password") if engine == "GitHub" else None
     scopus_api_key = st.text_input("Elsevier API Key (required for Scopus)", type="password") if engine == "Scopus" else None
     st.markdown("---")
     st.checkbox("Enable caching (1h)", value=True, key="enable_cache")
     st.markdown("---")
 
+# ---------------------------
+# Query instructions
+# ---------------------------
 st.markdown("### 📘 Query instructions")
 if engine == "Scopus":
-    st.info("Use Scopus syntax, e.g., `TITLE-ABS-KEY(\"cloud computing\")`")
+    st.info(
+        "Use Scopus syntax. Expand plurals manually. Example query:\n\n"
+        "TITLE-ABS-KEY (\n"
+        "    (\"cloud computing\" OR \"cloud-computing\" OR \"multi-cloud\")\n"
+        "    AND (\"ontology\" OR \"ontologies\" OR \"semantic web\" OR \"knowledge graph\" OR "
+        "\"knowledge graphs\" OR \"linked data\" OR \"linked open data\")\n"
+        "    AND NOT (\"internet of things\" OR iot)\n"
+        ")\n"
+        "AND PUBYEAR > 2014\n"
+        "AND PUBYEAR < 2027\n"
+        "AND (DOCTYPE(ar) OR DOCTYPE(cp))\n"
+        "AND LANGUAGE(English)"
+    )
 elif engine == "GitHub":
-    st.info("Use GitHub Search syntax, e.g., `machine learning language:python`")
-else:
-    st.info("Use Zenodo syntax, e.g., `title:\"machine learning\"`")
+    st.info(
+        "Use GitHub search syntax. Examples:\n"
+        "- Exact phrase: \"machine learning\"\n"
+        "- Exclude term: -iot\n"
+        "- Combine multiple terms: \"cloud computing\" ontology -iot -\"internet of things\""
+    )
+else:  # Zenodo
+    st.info(
+        "Use Zenodo syntax. Wildcards (*) and LIMIT-TO are not supported. Use AND, OR, NOT and publication_date. Example:\n\n"
+        "(\"cloud computing\" OR \"cloud-computing\" OR \"multi-cloud\")\n"
+        "AND (\"ontology\" OR \"ontologies\" OR \"semantic web\" OR \"knowledge graph\" "
+        "OR \"knowledge graphs\" OR \"linked data\" OR \"linked open data\")\n"
+        "AND NOT (\"internet of things\" OR iot)\n"
+        "AND publication_date:[2014-01-01 TO 2027-12-31]"
+    )
 
 query = st.text_area("Enter query", height=120, placeholder="Write the query following engine syntax")
 
 with st.expander("📌 Available fields"):
-    fields = ENGINE_FIELDS[engine]
-    for k, v in fields.items():
+    for k, v in ENGINE_FIELDS[engine].items():
         st.markdown(f"- **`{k}`** — {v}")
 
 with st.expander("🔧 Select columns", expanded=True):
@@ -174,22 +196,15 @@ with st.expander("🔧 Select columns", expanded=True):
     selected_columns = all_fields.copy() if include_all else st.multiselect("Choose columns", options=all_fields, default=all_fields[:6])
 
 # ---------------------------
-# Caching wrappers for multi-keyword GitHub
+# Caching wrappers
 # ---------------------------
 enable_cache = st.session_state.get("enable_cache", True)
 cache_decorator = st.cache_data if enable_cache else lambda f: f
 
 @cache_decorator(ttl=3600)
-def cached_fetch_github_multi(include_lists, exclude_list=None, created_after=None,
-                              created_before=None, token=None, max_results=200):
+def cached_fetch_github(q, token=None, max_results=200):
     fetcher = GitHubFetcher(token=token)
-    return fetcher.fetch_multiple_keywords(
-        include_lists=include_lists,
-        exclude_list=exclude_list,
-        created_after=created_after,
-        created_before=created_before,
-        max_results=max_results
-    )
+    return fetcher.fetch_repositories(q, max_results=max_results)
 
 @cache_decorator(ttl=3600)
 def cached_fetch_zenodo(q):
@@ -217,19 +232,8 @@ with tab_run:
         with st.spinner(f"Executing search on {engine}..."):
             try:
                 if engine == "GitHub":
-                    # For demo: split keywords by comma
-                    words = [w.strip() for w in query.split(",") if w.strip()]
-                    mid = len(words) // 2
-                    include_lists = [words[:mid] or words, words[mid:] or words]
-                    exclude_list = []  # optionally parse "-term"
-                    records = cached_fetch_github_multi(
-                        include_lists=include_lists,
-                        exclude_list=exclude_list,
-                        created_after="2014-01-01",
-                        created_before="2027-12-31",
-                        token=github_token,
-                        max_results=5000
-                    )
+                    # Directly use the query as entered
+                    records = cached_fetch_github(query, github_token)
                 elif engine == "Zenodo":
                     records = cached_fetch_zenodo(query)
                 else:
@@ -271,7 +275,8 @@ with tab_results:
                                    file_name=f"{last_engine.lower()}_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.csv")
                 st.download_button("⬇️ XLSX", data=to_xlsx_bytes(df[selected_columns_effective]),
                                    file_name=f"{last_engine.lower()}_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.xlsx")
-                st.download_button("⬇️ BibTeX", data=to_bib_bytes(df[selected_columns_effective].to_dict(orient="records"), prefix=last_engine.lower()),
+                st.download_button("⬇️ BibTeX", data=to_bib_bytes(df[selected_columns_effective].to_dict(orient="records"),
+                                                                   prefix=last_engine.lower()),
                                    file_name=f"{last_engine.lower()}_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.bib")
 
         if show_preview:
@@ -285,6 +290,9 @@ with tab_help:
     st.header("Help & Notes")
     st.markdown(
         "- Queries must follow the engine syntax.\n"
+        "- GitHub queries use quotes for exact phrases and `-term` for exclusions.\n"
+        "- Zenodo supports AND, OR, NOT and date ranges.\n"
+        "- Scopus queries should expand plurals and respect original Scopus syntax.\n"
         "- The app fetches all available results with pagination and caching.\n"
         "- XLSX export creates a formatted Excel table."
     )
