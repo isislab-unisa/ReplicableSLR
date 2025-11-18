@@ -3,6 +3,7 @@ import csv
 import time
 from datetime import datetime
 import os
+from itertools import product
 
 
 class GitHubFetcher:
@@ -37,11 +38,11 @@ class GitHubFetcher:
                 "page": page
             }
 
-            # retry loop
+            # Retry loop
             for attempt in range(self.max_retries):
                 response = requests.get(self.base_url, headers=self.headers, params=params)
 
-                # rate limit
+                # Rate limit
                 if response.status_code == 403 and "rate limit" in response.text.lower():
                     reset_time = response.headers.get("X-RateLimit-Reset")
                     if reset_time:
@@ -53,7 +54,7 @@ class GitHubFetcher:
                         time.sleep(60)
                     continue
 
-                # errori temporanei
+                # Errori temporanei
                 if response.status_code >= 500:
                     print(f"[WARN] Errore {response.status_code}. Riprovo...")
                     time.sleep(3)
@@ -92,6 +93,50 @@ class GitHubFetcher:
 
         print(f"[INFO] Totale risultati GitHub: {len(all_results)}")
         return all_results
+
+    def fetch_multiple_keywords(self, include_lists, exclude_list=None, created_after=None,
+                                created_before=None, max_results=200):
+        from itertools import product
+
+        if not include_lists:
+            raise ValueError("Almeno una lista di keyword è richiesta")
+
+        queries = []
+        for combo in product(*include_lists):
+            # Aggiungi virgolette alle parole multi-word
+            combo_q = [f'"{term}"' if " " in term else term for term in combo]
+            q = " ".join(combo_q)
+
+            if exclude_list:
+                # NOT (A OR B)
+                excl = " OR ".join([f'"{t}"' if " " in t else t for t in exclude_list])
+                q += f" NOT ({excl})"
+
+            if created_after:
+                q += f" created:>{created_after}"
+            if created_before:
+                q += f" created:<{created_before}"
+
+            q += " in:name,description"
+
+            queries.append(q)
+
+        all_results = []
+        for q in queries:
+            print(f"[INFO] Eseguo query: {q}")
+            results = self.fetch(q, max_results=max_results)
+            all_results.extend(results)
+
+        # Dedup
+        seen = set()
+        unique_results = []
+        for r in all_results:
+            if r['url'] not in seen:
+                unique_results.append(r)
+                seen.add(r['url'])
+
+        print(f"[INFO] Totale risultati unici: {len(unique_results)}")
+        return unique_results
 
     def save_csv(self, records, path):
         if not records:
