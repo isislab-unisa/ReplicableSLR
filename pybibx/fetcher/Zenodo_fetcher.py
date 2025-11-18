@@ -125,3 +125,27 @@ class ZenodoFetcher:
                 )
 
         print(f"[INFO] BibTeX Zenodo salvato in: {path}")
+
+    def save_bib(self, records, path):
+        """Salva i risultati Scopus in formato BibTeX"""
+        if not records:
+            print("[WARN] Nessun record da salvare in BibTeX.")
+            return
+
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            for i, r in enumerate(records, start=1):
+                key = f"scopus{i}"
+                title = r.get("title", "").replace("{", "\\{").replace("}", "\\}")
+                year = r.get("year", "")
+                abstract = r.get("abstract", "").replace("{", "\\{").replace("}", "\\}")
+                url = r.get("url", "")
+                f.write(
+                    f"@article{{{key},\n"
+                    f"  title={{{title}}},\n"
+                    f"  year={{{year}}},\n"
+                    f"  note={{{abstract}}},\n"
+                    f"  howpublished={{\\url{{{url}}}}}\n"
+                    f"}}\n\n"
+                )
+        print(f"[INFO] BibTeX salvato in: {path}")
