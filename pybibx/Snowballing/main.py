@@ -67,9 +67,12 @@ else:
     print("[INFO] Eseguo query Scopus...")
     fetcher = ScopusFetcher(api_key=API_KEY, per_page=25)
     records = fetcher.fetch(query)
-    fetcher.save_csv(CSV_PATH)
-    update_queries_log(query, CSV_PATH)
-    records = load_articles(CSV_PATH)
+    if records:  # controllo per evitare di salvare un CSV vuoto
+        fetcher.save_csv(records, CSV_PATH)
+        update_queries_log(query, CSV_PATH)
+    else:
+        print("[WARN] Nessun record recuperato, CSV non salvato.")
+    records = load_articles(CSV_PATH) if records else []
 
 # ---------------- SALVATAGGIO CSV RIDOTTO ----------------
 if records:
@@ -112,10 +115,17 @@ while True:
     if os.path.exists(BACKWARD_CSV):
         with open(BACKWARD_CSV, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
-            existing_backward_ids = {row["scopus_id"] for row in reader}
+            for row in reader:
+                sid = row.get("scopus_id") or row.get("doi") or ""
+                if sid:
+                    existing_backward_ids.add(sid)
 
-    new_backward = [r for r in BackwardSnowball(api_key=API_KEY).backward(scopus_id)
-                    if r.get("scopus_id", "") not in existing_backward_ids]
+    new_backward = []
+    bs = BackwardSnowball(api_key=API_KEY)
+    for r in bs.backward(scopus_id):
+        sid = r.get("scopus_id") or r.get("doi") or ""
+        if sid not in existing_backward_ids:
+            new_backward.append(r)
 
     print(f"[INFO] Articoli citati (backward) nuovi trovati: {len(new_backward)}")
 
@@ -132,15 +142,21 @@ while True:
         print("[INFO] Nessun nuovo articolo citato da aggiungere per backward snowballing")
 
     # ---------------- FORWARD SNOWBALLING ----------------
-    forward_snowball = ForwardSnowball(api_key=API_KEY, per_page=25)
     existing_forward_ids = set()
     if os.path.exists(FORWARD_CSV):
         with open(FORWARD_CSV, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
-            existing_forward_ids = {row["scopus_id"] for row in reader}
+            for row in reader:
+                fid = row.get("scopus_id") or row.get("doi") or ""
+                if fid:
+                    existing_forward_ids.add(fid)
 
-    new_forward = [r for r in forward_snowball.forward_snowball(scopus_id, origin_title, origin_year)
-                   if r.get("scopus_id", "") not in existing_forward_ids]
+    forward_snowball = ForwardSnowball(api_key=API_KEY, per_page=25)
+    new_forward = []
+    for r in forward_snowball.forward_snowball(scopus_id, origin_title, origin_year):
+        fid = r.get("scopus_id") or r.get("doi") or ""
+        if fid not in existing_forward_ids:
+            new_forward.append(r)
 
     print(f"[INFO] Articoli che citano (forward) nuovi trovati: {len(new_forward)}")
     forward_snowball.append_csv(new_forward, FORWARD_CSV, mode="a" if existing_forward_ids else "w")
