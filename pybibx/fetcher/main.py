@@ -12,7 +12,7 @@ from Zenodo_fetcher import ZenodoFetcher
 def main():
 
     # =====================================================
-    # CARTELLA RISULTATI → quella che hai chiesto
+    # OUTPUT FOLDER → the folder you specified
     # =====================================================
     output_dir = r"C:\Users\maria\Desktop\Cloud-Ontology\Fetcher-Results"
     os.makedirs(output_dir, exist_ok=True)
@@ -24,11 +24,11 @@ def main():
     SCOPUS_API_KEY = os.getenv("SCOPUS_API_KEY")
 
     if not SCOPUS_API_KEY:
-        raise ValueError("⚠️ SCOPUS_API_KEY non trovata nel .env")
+        raise ValueError("⚠️ SCOPUS_API_KEY not found in .env")
 
     scopus = ScopusFetcher(SCOPUS_API_KEY)
 
-    # === 🔥 QUERY IDENTICA ALLA TUA ORIGINALE (841 risultati) ===
+    # === 🔥 QUERY IDENTICAL TO YOUR ORIGINAL (841 results) ===
     query = (
         'TITLE-ABS-KEY ( ( "cloud computing" OR "cloud-computing" OR "multi-cloud" ) '
         'AND ( "ontolog*" OR "semantic web" OR "knowledge graph*" OR "linked data" OR "linked open data" ) '
@@ -38,13 +38,13 @@ def main():
         'AND LANGUAGE(English)'
     )
 
-    print("\n[INFO] Avvio fetch SCOPUS (query globale)...\n")
+    print("\n[INFO] Starting SCOPUS fetch (global query)...\n")
     records = scopus.fetch_all(query)
 
-    print(f"\n[INFO] Risultati grezzi: {len(records)}")
+    print(f"\n[INFO] Raw results: {len(records)}")
 
     # =====================================================
-    # DEDUP ROBUSTO (senza eliminare record validi)
+    # ROBUST DEDUPLICATION (without removing valid records)
     # =====================================================
 
     unique = []
@@ -66,37 +66,37 @@ def main():
 
         unique.append(r)
 
-    print(f"[INFO] Risultati unici finali: {len(unique)} (attesi: 841)")
+    print(f"[INFO] Final unique results: {len(unique)} (expected: 841)")
 
     # =====================================================
-    # SALVATAGGIO SCOPUS
+    # SAVE SCOPUS RESULTS
     # =====================================================
     scopus.save_csv(unique, os.path.join(output_dir, "scopus_results.csv"))
     scopus.save_bib(unique, os.path.join(output_dir, "scopus_results.bib"))
 
-    print("\n=== SCOPUS COMPLETATO ===\n")
+    print("\n=== SCOPUS COMPLETED ===\n")
 
     # =====================================================
-    # ===================== GITHUB ========================
+    # ===================== GITHUB =======================
     # =====================================================
     load_dotenv("token.env")
     github_token = os.getenv("GITHUB_TOKEN")
     if not github_token:
-        raise ValueError("⚠️ Token GitHub non trovato. Verifica token.env")
+        raise ValueError("⚠️ GitHub token not found. Check token.env")
 
     github_fetcher = GitHubFetcher(token=github_token)
 
-    # --- Controllo rate limit ---
+    # --- Rate limit check ---
     check = requests.get(
         "https://api.github.com/rate_limit",
         headers={'Authorization': f'token {github_token}'}
     )
     if check.status_code == 200:
         limits = check.json().get('resources', {}).get('search', {})
-        print(f"[INFO] Limite rimanente GitHub: "
+        print(f"[INFO] GitHub remaining limit: "
               f"{limits.get('remaining', '?')}/{limits.get('limit', '?')}")
 
-    # --- Query GitHub ---
+    # --- GitHub Query ---
     keywords_cloud = ['"cloud computing"', '"cloud-computing"', '"multi-cloud"']
     keywords_ontology = [
         '"ontology"', '"ontologies"', '"semantic web"', '"knowledge graph"',
@@ -130,7 +130,7 @@ def main():
     github_fetcher.save_as_bib(unique_results, os.path.join(output_dir, "github_results.bib"))
 
     # =====================================================
-    # ===================== ZENODO ========================
+    # ===================== ZENODO =======================
     # =====================================================
     zenodo_fetcher = ZenodoFetcher()
 

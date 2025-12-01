@@ -1,4 +1,3 @@
-# core_source.py
 from .base import BaseSource
 from .utils import fuzzy_match
 from .decorators import log_call
@@ -9,7 +8,7 @@ import re
 class CoreSource(BaseSource):
     @log_call
     def check(self, venue_name, log=True, results_dir=r"C:\Users\maria\Desktop\ReplicableSLR\pybibx\VenueRank-Results"):
-        # 🔹 Pulizia nome: rimuove eventuale anno dopo la virgola
+        # 🔹 Clean name: remove any year after a comma
         name_only = re.split(r",\s*\d{4}$", venue_name.strip(), flags=re.IGNORECASE)[0].lower()
         input_year = None
         if "," in venue_name:
@@ -20,7 +19,7 @@ class CoreSource(BaseSource):
 
         best_title = None
 
-        # 🔹 Step 1: controllo anno inserito, se disponibile
+        # 🔹 Step 1: check input year if available
         if input_year in self.data_by_year:
             df_check = self.data_by_year[input_year].copy()
             df_check['Title'] = df_check['Title'].str.strip().str.lower()
@@ -30,7 +29,7 @@ class CoreSource(BaseSource):
             else:
                 best_title = fuzzy_match(name_only, titles_list)
 
-        # 🔹 Step 2: se non trovato, fuzzy match globale tra tutti gli anni
+        # 🔹 Step 2: if not found, perform global fuzzy match across all years
         if not best_title:
             all_titles = []
             for df in self.data_by_year.values():
@@ -38,10 +37,10 @@ class CoreSource(BaseSource):
             best_title = fuzzy_match(name_only, all_titles)
 
         if not best_title:
-            print(f"[CORE] ❌ Venue non trovata: '{venue_name}'")
+            print(f"[CORE] ❌ Venue not found: '{venue_name}'")
             return
 
-        # 🔹 Step 3: trovo il record più recente
+        # 🔹 Step 3: find the most recent record
         matches = []
         for y, df in sorted(self.data_by_year.items(), reverse=True):
             df_copy = df.copy()
@@ -51,17 +50,17 @@ class CoreSource(BaseSource):
                 matches.append((y, match))
 
         if not matches:
-            print(f"[CORE] ❌ Nessun record trovato per '{best_title}'")
+            print(f"[CORE] ❌ No record found for '{best_title}'")
             return
 
         most_recent_year, df_match = max(matches, key=lambda x: x[0])
         row = df_match.iloc[0]
         rank = row.get("Rank", "N/A")
 
-        print(f"[CORE] ✅ Trovato → Anno più recente: {most_recent_year}")
+        print(f"[CORE] ✅ Found → Most recent year: {most_recent_year}")
         print(f"   🏷️ Rank: {rank}")
 
-        # 🔹 Step 4: Salvataggio cumulativo CSV
+        # 🔹 Step 4: cumulative CSV saving
         if log:
             os.makedirs(results_dir, exist_ok=True)
             csv_path = os.path.join(results_dir, "CORE-results.csv")
@@ -78,7 +77,7 @@ class CoreSource(BaseSource):
             else:
                 df_final = new_df
             df_final.to_csv(csv_path, index=False)
-            print(f"\n💾 Risultati aggiunti a: {csv_path}")
+            print(f"\n💾 Results appended to: {csv_path}")
 
     def available_years(self):
         return sorted(self.data_by_year.keys())

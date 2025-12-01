@@ -8,8 +8,8 @@ import urllib.parse
 
 class ZenodoFetcher:
     """
-    Fetcher generico per interrogare Zenodo API
-    e recuperare metadati su record open data.
+    Generic fetcher to query Zenodo API
+    and retrieve metadata on open data records.
     """
 
     def __init__(self, per_page=100, max_retries=3):
@@ -18,7 +18,7 @@ class ZenodoFetcher:
         self.max_retries = max_retries
 
     def fetch(self, query, max_results=200):
-        print(f"[INFO] Query Zenodo: {query}")
+        print(f"[INFO] Zenodo query: {query}")
 
         all_results = []
         page = 1
@@ -36,13 +36,13 @@ class ZenodoFetcher:
                 response = requests.get(url)
 
                 if response.status_code >= 500:
-                    print(f"[WARN] Zenodo errore {response.status_code}, riprovo...")
+                    print(f"[WARN] Zenodo server error {response.status_code}, retrying...")
                     time.sleep(3)
                     continue
 
                 break
             else:
-                print(f"[ERROR] Errore permanente Zenodo pagina {page}")
+                print(f"[ERROR] Permanent Zenodo error on page {page}")
                 break
 
             data = response.json()
@@ -65,7 +65,7 @@ class ZenodoFetcher:
                     "license": md.get("license", {}).get("id") if md.get("license") else None,
                 })
 
-            print(f"[INFO] Zenodo: pagina {page} ok ({len(hits)} risultati)")
+            print(f"[INFO] Zenodo: page {page} OK ({len(hits)} results)")
 
             if len(hits) < self.per_page:
                 break
@@ -73,12 +73,12 @@ class ZenodoFetcher:
             page += 1
             time.sleep(1)
 
-        print(f"[INFO] Totale risultati Zenodo: {len(all_results)}")
+        print(f"[INFO] Total Zenodo results: {len(all_results)}")
         return all_results
 
     def save_csv(self, records, path):
         if not records:
-            print("[WARN] Nessun dato da salvare.")
+            print("[WARN] No data to save.")
             return
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -89,11 +89,11 @@ class ZenodoFetcher:
             writer.writeheader()
             writer.writerows(records)
 
-        print(f"[INFO] CSV Zenodo salvato in: {path}")
+        print(f"[INFO] Zenodo CSV saved to: {path}")
 
     def save_bib(self, records, path):
         if not records:
-            print("[WARN] Nessun record da salvare.")
+            print("[WARN] No records to save in BibTeX.")
             return
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -116,36 +116,12 @@ class ZenodoFetcher:
 
                 f.write(
                     f"@misc{{{key},\n"
-                    f"  title={{{{{rec.get('title', '')}}}}},\n"
-                    f"  author={{{{{rec.get('author', '')}}}}},\n"
-                    f"  year={{{{{year}}}}},\n"
-                    f"  howpublished={{\\url{{{rec.get('url', '')}}}}},\n"
-                    f"  note={{{{{note}}}}}\n"
-                    f"}}\n\n"
-                )
-
-        print(f"[INFO] BibTeX Zenodo salvato in: {path}")
-
-    def save_bib(self, records, path):
-        """Salva i risultati Scopus in formato BibTeX"""
-        if not records:
-            print("[WARN] Nessun record da salvare in BibTeX.")
-            return
-
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            for i, r in enumerate(records, start=1):
-                key = f"scopus{i}"
-                title = r.get("title", "").replace("{", "\\{").replace("}", "\\}")
-                year = r.get("year", "")
-                abstract = r.get("abstract", "").replace("{", "\\{").replace("}", "\\}")
-                url = r.get("url", "")
-                f.write(
-                    f"@article{{{key},\n"
-                    f"  title={{{title}}},\n"
+                    f"  title={{{rec.get('title', '')}}},\n"
+                    f"  author={{{rec.get('author', '')}}},\n"
                     f"  year={{{year}}},\n"
-                    f"  note={{{abstract}}},\n"
-                    f"  howpublished={{\\url{{{url}}}}}\n"
+                    f"  howpublished={{\\url{{{rec.get('url', '')}}}}},\n"
+                    f"  note={{{note}}}\n"
                     f"}}\n\n"
                 )
-        print(f"[INFO] BibTeX salvato in: {path}")
+
+        print(f"[INFO] Zenodo BibTeX saved to: {path}")

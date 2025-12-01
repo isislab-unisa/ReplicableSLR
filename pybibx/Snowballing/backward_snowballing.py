@@ -3,14 +3,14 @@ import requests
 
 class BackwardSnowball:
     """
-    Recupera i references di un articolo Scopus dato il suo SCOPUS ID.
-    Usa l'Abstract Retrieval API di Scopus e, se non disponibili, fa fallback su CrossRef tramite DOI.
-    Restituisce lista di dict con: title, authors, doi, year, source.
+    Retrieves the references of a Scopus article given its SCOPUS ID.
+    Uses the Scopus Abstract Retrieval API and, if not available, falls back to CrossRef via DOI.
+    Returns a list of dicts with: title, authors, doi, year, source.
     """
 
     def __init__(self, api_key):
         if not api_key:
-            raise ValueError("API key Scopus richiesta")
+            raise ValueError("Scopus API key required")
         self.api_key = api_key
         self.base_url = "https://api.elsevier.com/content/abstract/scopus_id/{scopus_id}?view=FULL"
         self.headers = {"X-ELS-APIKey": self.api_key, "Accept": "application/json"}
@@ -18,11 +18,11 @@ class BackwardSnowball:
 
     def backward(self, scopus_id):
         if not scopus_id:
-            raise ValueError("SCOPUS ID non fornito")
+            raise ValueError("SCOPUS ID not provided")
 
         references = []
 
-        # 🔹 1) Abstract Retrieval API Scopus
+        # 🔹 1) Scopus Abstract Retrieval API
         url = self.base_url.format(scopus_id=scopus_id)
         doi_main = None
         try:
@@ -30,12 +30,12 @@ class BackwardSnowball:
             if r.status_code == 200:
                 data = r.json()
 
-                # Salvo il DOI principale per fallback CrossRef
+                # Save main DOI for CrossRef fallback
                 doi_main = data.get("abstracts-retrieval-response", {}) \
                                .get("coredata", {}) \
                                .get("prism:doi", None)
 
-                # Lista references
+                # List of references
                 ref_list = data.get("abstracts-retrieval-response", {}) \
                                .get("references", {}) \
                                .get("reference", [])
@@ -61,14 +61,14 @@ class BackwardSnowball:
                         "source": source
                     })
             else:
-                print(f"[WARN] Abstract API fallita per {scopus_id}, status {r.status_code}")
+                print(f"[WARN] Abstract API failed for {scopus_id}, status {r.status_code}")
 
         except Exception as e:
-            print(f"[ERROR] Errore durante il recupero Scopus: {e}")
+            print(f"[ERROR] Error during Scopus retrieval: {e}")
 
-        # 🔹 2) Fallback CrossRef se non ci sono references e c'è DOI
+        # 🔹 2) CrossRef fallback if no references and DOI is available
         if not references and doi_main:
-            print(f"[INFO] Nessun reference trovato in Scopus, provo CrossRef per DOI {doi_main}")
+            print(f"[INFO] No references found in Scopus, trying CrossRef for DOI {doi_main}")
             try:
                 r = requests.get(self.crossref_url.format(doi=doi_main))
                 if r.status_code == 200:
@@ -83,11 +83,11 @@ class BackwardSnowball:
                             "source": ref.get("journal-title", "")
                         })
                 else:
-                    print(f"[WARN] CrossRef fallita per DOI {doi_main}, status {r.status_code}")
+                    print(f"[WARN] CrossRef failed for DOI {doi_main}, status {r.status_code}")
             except Exception as e:
-                print(f"[ERROR] Errore durante il fallback CrossRef: {e}")
+                print(f"[ERROR] Error during CrossRef fallback: {e}")
 
         if not references:
-            print(f"[INFO] Nessun reference recuperato per SCOPUS ID {scopus_id}")
+            print(f"[INFO] No references retrieved for SCOPUS ID {scopus_id}")
 
         return references

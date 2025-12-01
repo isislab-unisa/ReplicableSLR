@@ -17,6 +17,7 @@ from Scopus_Fetcher import ScopusFetcher
 # Utilities
 # ---------------------------
 def clean_html(text):
+    """Remove HTML tags and replace common HTML entities."""
     if text is None:
         return ""
     s = str(text)
@@ -26,10 +27,12 @@ def clean_html(text):
 
 
 def to_csv_bytes(df: pd.DataFrame) -> bytes:
+    """Convert DataFrame to CSV bytes (UTF-8 with BOM)."""
     return df.to_csv(index=False).encode("utf-8-sig")
 
 
 def to_bib_bytes(records, prefix="entry") -> bytes:
+    """Convert list of dict records to BibTeX bytes."""
     buf = ""
     for i, rec in enumerate(records):
         key = f"{prefix}{i+1}"
@@ -43,6 +46,7 @@ def to_bib_bytes(records, prefix="entry") -> bytes:
 
 
 def to_xlsx_bytes(df: pd.DataFrame, table_name="ResultsTable") -> bytes:
+    """Convert DataFrame to formatted XLSX bytes with table."""
     from openpyxl import Workbook
     from openpyxl.utils.dataframe import dataframe_to_rows
     from openpyxl.worksheet.table import Table, TableStyleInfo
@@ -190,7 +194,7 @@ query = st.text_area("Enter query", height=120, placeholder="Write the query fol
 
 with st.expander("📌 Available fields"):
     fields = list(ENGINE_FIELDS[engine].items())
-    n_cols = 3  # numero di colonne
+    n_cols = 3  # number of columns
     cols = st.columns(n_cols)
     for i, (field, desc) in enumerate(fields):
         col = cols[i % n_cols]

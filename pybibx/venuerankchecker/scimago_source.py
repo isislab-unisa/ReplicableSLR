@@ -1,4 +1,3 @@
-# scimago_source.py
 from .base import BaseSource
 from .utils import fuzzy_match
 from .decorators import log_call
@@ -8,7 +7,7 @@ import os
 class ScimagoSource(BaseSource):
     @log_call
     def check(self, venue_name, log=True, results_dir=r"C:\Users\maria\Desktop\ReplicableSLR\pybibx\VenueRank-Results"):
-        # 🔹 Normalizzazione nome
+        # 🔹 Normalize name
         name_only = venue_name.split(",")[0].strip().lower()
         input_year = None
         if "," in venue_name:
@@ -19,7 +18,7 @@ class ScimagoSource(BaseSource):
 
         best_title = None
 
-        # 🔹 Step 1: controllo anno inserito, se disponibile
+        # 🔹 Step 1: check input year if available
         if input_year in self.data_by_year:
             df_check = self.data_by_year[input_year].copy()
             df_check['Title'] = df_check['Title'].str.strip().str.lower()
@@ -29,7 +28,7 @@ class ScimagoSource(BaseSource):
             else:
                 best_title = fuzzy_match(name_only, titles_list)
 
-        # 🔹 Step 2: se non trovato, fuzzy match globale tra tutti gli anni
+        # 🔹 Step 2: if not found, global fuzzy match across all years
         if not best_title:
             all_titles = []
             for df in self.data_by_year.values():
@@ -37,10 +36,10 @@ class ScimagoSource(BaseSource):
             best_title = fuzzy_match(name_only, all_titles)
 
         if not best_title:
-            print(f"[SCIMAGO] ❌ Venue non trovata: '{venue_name}'")
+            print(f"[SCIMAGO] ❌ Venue not found: '{venue_name}'")
             return
 
-        # 🔹 Step 3: trovo il record più recente
+        # 🔹 Step 3: find the most recent record
         matches = []
         for y, df in sorted(self.data_by_year.items(), reverse=True):
             df_copy = df.copy()
@@ -50,7 +49,7 @@ class ScimagoSource(BaseSource):
                 matches.append((y, match))
 
         if not matches:
-            print(f"[SCIMAGO] ❌ Nessun record trovato per '{best_title}'")
+            print(f"[SCIMAGO] ❌ No record found for '{best_title}'")
             return
 
         most_recent_year, df_match = max(matches, key=lambda x: x[0])
@@ -59,8 +58,8 @@ class ScimagoSource(BaseSource):
         categories = str(row.get('Categories', '')).split(';')
         areas = str(row.get('Areas', '')).split(';')
 
-        print(f"[SCIMAGO] ✅ Trovato → Anno più recente: {most_recent_year}")
-        print("   📂 Categorie:")
+        print(f"[SCIMAGO] ✅ Found → Most recent year: {most_recent_year}")
+        print("   📂 Categories:")
 
         results = []
         for i, cat in enumerate(categories):
@@ -87,7 +86,7 @@ class ScimagoSource(BaseSource):
                     "Quartile": quartile
                 })
 
-        # 🔹 Step 4: Salvataggio cumulativo CSV
+        # 🔹 Step 4: Save cumulative CSV
         if log:
             os.makedirs(results_dir, exist_ok=True)
             csv_path = os.path.join(results_dir, "SCIMAGO-results.csv")
@@ -98,8 +97,8 @@ class ScimagoSource(BaseSource):
             else:
                 df_final = new_df
             df_final.to_csv(csv_path, index=False)
-            print(f"\n💾 Risultati aggiunti a: {csv_path}")
+            print(f"\n💾 Results appended to: {csv_path}")
 
     def available_years(self):
-        """Restituisce la lista degli anni disponibili nei dati SCIMAGO."""
+        """Returns the list of available years in SCIMAGO data."""
         return sorted(self.data_by_year.keys())

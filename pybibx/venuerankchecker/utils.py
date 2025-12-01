@@ -7,6 +7,7 @@ def fuzzy_match(name, options, cutoff=0.8):
     return matches[0] if matches else None
 
 def parse_coverage(coverage, year):
+    """Check if a given year falls within the coverage intervals."""
     try:
         coverage = str(coverage).replace('–', '-').replace('\u2013', '-')
         intervals = [part.strip() for part in coverage.split(',')]
@@ -22,6 +23,7 @@ def parse_coverage(coverage, year):
     return False
 
 def log_result(source, venue, year, rank_type, rank_value, log_path="venue_rank_log.csv"):
+    """Log a rank result, avoiding duplicates."""
     if os.path.exists(log_path):
         log_df = pd.read_csv(log_path)
     else:

@@ -24,14 +24,14 @@ class ForwardSnowball:
 
             if r.status_code == 429:
                 retry_after = int(r.headers.get("Retry-After", 30))
-                print(f"[WARN] Rate limit, attendo {retry_after}s...")
+                print(f"[WARN] Rate limit reached, waiting {retry_after}s...")
                 time.sleep(retry_after + 1)
                 continue
             elif r.status_code == 400:
-                print(f"[WARN] REF query non valida per {scopus_id}")
+                print(f"[WARN] Invalid REF query for {scopus_id}")
                 break
             elif r.status_code >= 500:
-                print(f"[WARN] Errore server {r.status_code} su REF({scopus_id}).")
+                print(f"[WARN] Server error {r.status_code} on REF({scopus_id}). Retrying...")
                 time.sleep(3)
                 continue
 
@@ -81,7 +81,7 @@ class ForwardSnowball:
     def append_csv(self, records, path, mode="a"):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         if not records:
-            print(f"[INFO] Nessun record da scrivere, CSV rimane intatto.")
+            print(f"[INFO] No records to write, CSV remains unchanged.")
             return
 
         fieldnames = list(records[0].keys())
@@ -94,5 +94,4 @@ class ForwardSnowball:
             for r in records:
                 writer.writerow(r)
 
-        print(f"[INFO] Aggiunti {len(records)} record a {path}")
-
+        print(f"[INFO] Added {len(records)} records to {path}")

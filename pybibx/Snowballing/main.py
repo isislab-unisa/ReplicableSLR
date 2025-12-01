@@ -17,22 +17,22 @@ ENV_PATH = os.path.join(BASE_DIR, "scopus_key.env")
 load_dotenv(ENV_PATH)
 API_KEY = os.getenv("SCOPUS_API_KEY")
 if not API_KEY:
-    raise ValueError("⚠️ SCOPUS_API_KEY non trovata!")
+    raise ValueError("⚠️ SCOPUS_API_KEY not found!")
 
-# CSV principali
+# CSV 
 CSV_PATH = os.path.join(BASE_DIR, "scopus_query.csv")
 MINIMAL_CSV = os.path.join(BASE_DIR, "scopus_query_minimal.csv")
 BACKWARD_CSV = os.path.join(RESULTS_DIR, "backward_snowballing.csv")
 FORWARD_CSV = os.path.join(RESULTS_DIR, "forward_snowballing.csv")
 LOG_QUERIES_CSV = os.path.join(BASE_DIR, "queries_log.csv")
 
-# ---------------- FUNZIONI ----------------
+# ---------------- Functions ----------------
 def hash_query(query):
-    """Crea hash MD5 della query per tracking."""
+    """Creates MD5 hash of the query for tracking."""
     return hashlib.md5(query.encode("utf-8")).hexdigest()
 
 def update_queries_log(query, csv_path):
-    """Aggiorna il log delle query eseguite."""
+    """Updates the log of executed queries."""
     if not os.path.exists(LOG_QUERIES_CSV):
         with open(LOG_QUERIES_CSV, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.DictWriter(f, fieldnames=["query_hash", "query", "csv_path"])
@@ -42,7 +42,7 @@ def update_queries_log(query, csv_path):
         writer.writerow({"query_hash": hash_query(query), "query": query, "csv_path": csv_path})
 
 def check_query_cache(query):
-    """Verifica se la query è già stata eseguita e ritorna il CSV esistente."""
+    """Checks if the query was already executed and returns the existing CSV."""
     query_hash = hash_query(query)
     if os.path.exists(LOG_QUERIES_CSV):
         with open(LOG_QUERIES_CSV, "r", encoding="utf-8-sig") as f:
@@ -52,29 +52,29 @@ def check_query_cache(query):
                     return row["csv_path"]
     return None
 
-# ---------------- COSTRUISCI QUERY ----------------
-print("Inserisci la query per Scopus (TITLE-ABS-KEY, AND, OR, NOT, ecc.):")
+# ---------------- QUERY STRUCTURE ----------------
+print("Enter the query for Scopus (TITLE-ABS-KEY, AND, OR, NOT, etc.):")
 query = input("> ").strip()
 if not query:
-    raise ValueError("Query non può essere vuota")
+    raise ValueError("Query cannot be empty")
 
 # ---------------- FETCH / CACHE ----------------
 cached_csv = check_query_cache(query)
 if cached_csv:
-    print(f"[INFO] Query già eseguita, riuso CSV: {cached_csv}")
+    print(f"[INFO] Query already executed, reusing CSV: {cached_csv}")
     records = load_articles(cached_csv)
 else:
-    print("[INFO] Eseguo query Scopus...")
+    print("[INFO] Executing Scopus query...")
     fetcher = ScopusFetcher(api_key=API_KEY, per_page=25)
     records = fetcher.fetch(query)
-    if records:  # controllo per evitare di salvare un CSV vuoto
+    if records:  # check to avoid saving an empty CSV
         fetcher.save_csv(records, CSV_PATH)
         update_queries_log(query, CSV_PATH)
     else:
-        print("[WARN] Nessun record recuperato, CSV non salvato.")
+        print("[WARN] No records retrieved, CSV not saved.")
     records = load_articles(CSV_PATH) if records else []
 
-# ---------------- SALVATAGGIO CSV RIDOTTO ----------------
+# ---------------- REDUCED CSV SAVING ----------------
 if records:
     minimal_fields = ["scopus_id", "eid", "title", "references", "cited_by"]
     minimal_records = [
@@ -90,17 +90,17 @@ if records:
         writer = csv.DictWriter(f, fieldnames=minimal_fields)
         writer.writeheader()
         writer.writerows(minimal_records)
-    print(f"[INFO] CSV minimale salvato in {MINIMAL_CSV}")
+    print(f"[INFO] Minimal CSV saved at {MINIMAL_CSV}")
 
-# ---------------- LOOP ARTICOLI ----------------
+# ---------------- ARTICLES LOOP ----------------
 while True:
-    search_title = input("Inserisci il titolo dell'articolo su cui fare snowballing:\n> ").strip()
+    search_title = input("Enter the title of the article for snowballing:\n> ").strip()
     article = find_article_by_title(records, search_title)
     if not article:
-        print("❌ Articolo non trovato nel CSV.")
-        cont = input("Vuoi provare con un altro titolo? (s/n) ").strip().lower()
-        if cont != "s":
-            print("[INFO] Fine operazione di snowballing")
+        print("❌ Article not found in CSV.")
+        cont = input("Do you want to try another title? (y/n) ").strip().lower()
+        if cont != "y":
+            print("[INFO] Snowballing operation finished")
             break
         else:
             continue
@@ -108,7 +108,7 @@ while True:
     scopus_id = article["scopus_id"]
     origin_title = article["title"]
     origin_year = article.get("year", "")
-    print(f"[INFO] Articolo selezionato: {origin_title} (SCOPUS ID: {scopus_id})")
+    print(f"[INFO] Selected article: {origin_title} (SCOPUS ID: {scopus_id})")
 
     # ---------------- BACKWARD SNOWBALLING ----------------
     existing_backward_ids = set()
@@ -127,7 +127,7 @@ while True:
         if sid not in existing_backward_ids:
             new_backward.append(r)
 
-    print(f"[INFO] Articoli citati (backward) nuovi trovati: {len(new_backward)}")
+    print(f"[INFO] New cited articles (backward) found: {len(new_backward)}")
 
     if new_backward:
         fieldnames = list(new_backward[0].keys())
@@ -137,9 +137,9 @@ while True:
             if mode == "w":
                 writer.writeheader()
             writer.writerows(new_backward)
-        print(f"[INFO] Backward snowballing aggiornato in {BACKWARD_CSV}")
+        print(f"[INFO] Backward snowballing updated in {BACKWARD_CSV}")
     else:
-        print("[INFO] Nessun nuovo articolo citato da aggiungere per backward snowballing")
+        print("[INFO] No new cited articles to add for backward snowballing")
 
     # ---------------- FORWARD SNOWBALLING ----------------
     existing_forward_ids = set()
@@ -158,11 +158,10 @@ while True:
         if fid not in existing_forward_ids:
             new_forward.append(r)
 
-    print(f"[INFO] Articoli che citano (forward) nuovi trovati: {len(new_forward)}")
+    print(f"[INFO] New citing articles (forward) found: {len(new_forward)}")
     forward_snowball.append_csv(new_forward, FORWARD_CSV, mode="a" if existing_forward_ids else "w")
 
-    # ---------------- CONTINUA? ----------------
-    cont = input("Vuoi trovare citanti e citati di un altro articolo? (s/n) ").strip().lower()
-    if cont != "s":
-        print("[INFO] Fine operazione di snowballing")
+    cont = input("Do you want to find citing and cited articles for another article? (y/n) ").strip().lower()
+    if cont != "y":
+        print("[INFO] Snowballing operation finished")
         break

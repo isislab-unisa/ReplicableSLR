@@ -7,9 +7,9 @@ import os
 class ScopusFetcher:
     def __init__(self, api_key, per_page=25, max_retries=3):
         """
-        api_key: API Key Elsevier
-        per_page: risultati per pagina (max 25/200)
-        max_retries: tentativi in caso di errori di rete / rate limit
+        api_key: Elsevier API Key
+        per_page: results per page (max 25/200)
+        max_retries: attempts in case of network errors / rate limit
         """
         self.base_url = "https://api.elsevier.com/content/search/scopus"
         self.headers = {
@@ -21,8 +21,8 @@ class ScopusFetcher:
 
     def fetch(self, query):
         """
-        Recupera tutti i risultati di una query Scopus,
-        cercando di estrarre il massimo dei campi possibili.
+        Retrieves all results for a Scopus query,
+        attempting to extract as many fields as possible.
         """
         results = []
         start = 0
@@ -39,17 +39,17 @@ class ScopusFetcher:
                 r = requests.get(self.base_url, headers=self.headers, params=params)
                 if r.status_code == 429:
                     retry_after = int(r.headers.get("Retry-After", 30))
-                    print(f"[WARN] Rate limit, attendo {retry_after}s...")
+                    print(f"[WARN] Rate limit, waiting {retry_after}s...")
                     time.sleep(retry_after + 1)
                     continue
                 elif r.status_code >= 500:
-                    print(f"[WARN] Errore server {r.status_code}, riprovo...")
+                    print(f"[WARN] Server error {r.status_code}, retrying...")
                     time.sleep(3)
                     continue
                 else:
                     break
             else:
-                print(f"[ERROR] Impossibile completare la richiesta per start={start}")
+                print(f"[ERROR] Unable to complete request for start={start}")
                 break
 
             data = r.json()
@@ -58,7 +58,7 @@ class ScopusFetcher:
                 break
 
             for e in entries:
-                # estrazione campi principali e "tutti quelli possibili"
+                # extract main fields and "all possible" ones
                 results.append({
                     "scopus_id": e.get("dc:identifier", "").replace("SCOPUS_ID:", ""),
                     "eid": e.get("eid", ""),
@@ -74,8 +74,8 @@ class ScopusFetcher:
                     "isbn": e.get("prism:isbn") or "",
                     "affiliations": e.get("affiliation") or "",
                     "subject_areas": e.get("subject-areas") or "",
-                    "references": e.get("citedby-count", 0),  # numero di citazioni
-                    "citations": e.get("citedby-count", 0),   # numero di citazioni (puoi differenziare se usi altra API)
+                    "references": e.get("citedby-count", 0),  # number of citations
+                    "citations": e.get("citedby-count", 0),   # number of citations (can differentiate if using another API)
                     "url": e.get("link", [{}])[0].get("@href") or "",
                     "abstract": e.get("dc:description") or "",
                     "language": e.get("language") or "",
@@ -84,20 +84,20 @@ class ScopusFetcher:
 
             total_retrieved += len(entries)
             total_results = int(data.get("search-results", {}).get("opensearch:totalResults", 0))
-            print(f"[INFO] Recuperati {total_retrieved}/{total_results} risultati...")
+            print(f"[INFO] Retrieved {total_retrieved}/{total_results} results...")
 
             start += len(entries)
             if start >= total_results:
                 break
 
-            time.sleep(1)  # pausa gentile tra le richieste
+            time.sleep(1)  # polite pause between requests
 
-        print(f"[INFO] Totale risultati recuperati: {len(results)}")
+        print(f"[INFO] Total results retrieved: {len(results)}")
         return results
 
     def save_csv(self, records, path):
         if not records:
-            print("[WARN] Nessun record da salvare.")
+            print("[WARN] No records to save.")
             return
         os.makedirs(os.path.dirname(path), exist_ok=True)
         fieldnames = list(records[0].keys())
@@ -105,4 +105,4 @@ class ScopusFetcher:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(records)
-        print(f"[INFO] CSV salvato in: {path}")
+        print(f"[INFO] CSV saved at: {path}")
