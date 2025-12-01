@@ -24,7 +24,7 @@
 
 ## Introduction
 
-**Author:** [Insert Name]  
+**Author:** Maria Cascone  
 **Project Objective:** Extend PyBibX, a Python library for automating scientific research and systematic literature reviews, adding support for additional sources, automated snowballing, venue ranking, and multivocal literature analysis.
 
 PyBibX is an advanced Python library for bibliometric, scientometric, and textual analysis on datasets exported from scientific databases such as **Scopus**, **Web of Science**, and **PubMed**. The library supports common formats (BibTeX, CSV, TXT), preserving original metadata and enabling consistent analyses even on heterogeneous datasets.
@@ -43,7 +43,7 @@ PyBibX is an advanced Python library for bibliometric, scientometric, and textua
 
 Originally, PyBibX worked only with Scopus, Web of Science, and PubMed datasets. To perform **multivocal and up-to-date literature reviews**, extensions were developed for:  
 
-- Integration with additional external sources (**GitHub, Zenodo, LodCloud, blogs, whitepapers, StackOverflow**).  
+- Integration with additional external sources (**GitHub, Zenodo, LodCloud**).  
 - Automated snowballing (forward and backward).  
 - Venue ranking (**CORE and SCImago**).  
 - Support for Multivocal Literature Review (MLR).
@@ -108,7 +108,7 @@ A **Streamlit/Flask dashboard** provides centralized access to data collected by
 
 **Purpose:** include non-academic sources for MLR.
 
-**Integrated sources:** GitHub, Zenodo, LodCloud, blogs, whitepapers, StackOverflow.  
+**Integrated sources:** GitHub, Zenodo, LodCloud.
 
 **Features:**  
 - Independent fetchers with rate-limit and pagination handling.  
@@ -142,7 +142,6 @@ A **Streamlit/Flask dashboard** provides centralized access to data collected by
 - API keys for Scopus and GitHub (optional, recommended for automated fetches)
 
 ---
-
 ## Installation
 
 ```bash
@@ -150,10 +149,48 @@ A **Streamlit/Flask dashboard** provides centralized access to data collected by
 git clone https://github.com/yourusername/pybibx-extended.git
 cd pybibx-extended
 
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
+# Create a new conda environment
+conda create -n pybibx-extended python=3.9 -y
 
-# Install dependencies
-pip install -r requirements.txt
+# Activate the environment
+conda activate pybibx-extended
+
+### Manual Data Setup (CORE, SCImago, LodCloud)
+
+Some datasets **cannot be fetched automatically** because they either lack public APIs or explicitly block automated access.  
+Therefore, you must download them manually and place them in the correct folders so that PyBibX Extended can load them.
+
+#### 1. CORE Conference & Journal Rankings
+- Download the latest CSV from:  
+  https://www.core.edu.au/conference-portal  
+- Place the file(s) in:  
+pybibx\Rankings-Core
+
+
+#### 2. SCImago Journal & Country Rank
+- Download the most recent SCImago CSV export from:  
+https://www.scimagojr.com/  
+- Place the file(s) in:  
+pybibx\Rankings-Scimago
+
+
+#### 3. LodCloud (Linked Open Data Cloud)
+- Download relevant datasets directly from:  
+http://lod-cloud.net/  
+- Place the file(s) in:  
+https://lod-cloud.net/versions/2025-09-02/lod-data.json
+
+
+---
+
+### ⚠️ Update Source Paths in the Code
+
+After placing the datasets in the appropriate folders, you must update the file paths inside:
+
+- `pybibx/venuerankchecker/core_source.py`
+- `pybibx/venuerankchecker/scimago_source.py`
+- `pybibx/venuerankchecker/main.py`
+
+Set the internal constants to match the repository structure in result_dir
+These datasets will be automatically detected and processed by the internal modules during execution.
+
